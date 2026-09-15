@@ -1,0 +1,2 @@
+import{g as e,p as s}from"./http-CFi3ScYz.js";async function a(n,t,r=!0){return s("/login",{username:n,password:t,isLogin:r})}async function u(){return s("/logout")}async function c(){return e("/getUserInfo")}async function g(){return e("/getUserList")}async function i(n,t,r){return s("/addUser",{username:n,password:t,...r})}async function f(n){return s("/saveUserConfig",n)}export{u as a,g as b,i as c,c as g,a as l,f as s};
+//# sourceMappingURL=user-CTw4KWpV.js.map

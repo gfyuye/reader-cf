@@ -1,0 +1,273 @@
+const css = `
+:root {
+  --primary-color: #409eff;
+  --text-primary: #303133;
+  --text-regular: #606266;
+  --text-secondary: #909399;
+  --text-placeholder: #c0c4cc;
+  --border-color: #dcdfe6;
+  --border-light: #e4e7ed;
+  --bg-color: #f5f7fa;
+  --bg-page: #f0f2f5;
+  --sidebar-width: 220px;
+  --header-height: 60px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg-page);
+  color: var(--text-primary);
+}
+
+#app {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.layout-container {
+  height: 100vh;
+}
+
+.sidebar {
+  background: #304156;
+  transition: width 0.3s;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.logo {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 20px;
+  font-weight: bold;
+  border-bottom: 1px solid #263445;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sidebar-menu {
+  flex: 1;
+  overflow-y: auto;
+  border-right: none !important;
+  background: #304156;
+}
+
+.sidebar-menu .el-menu-item {
+  height: 50px;
+  line-height: 50px;
+  color: #bfcbd9;
+}
+
+.sidebar-menu .el-menu-item:hover {
+  background-color: #263445 !important;
+}
+
+.sidebar-menu .el-menu-item.is-active {
+  background-color: #409eff !important;
+  color: #fff;
+}
+
+.sidebar-footer {
+  padding: 12px;
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid #263445;
+  flex-shrink: 0;
+}
+
+.sidebar-footer .el-button {
+  color: #bfcbd9;
+  background: transparent;
+  border: 1px solid #409eff;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: var(--header-height);
+  background: #fff;
+  border-bottom: 1px solid var(--border-light);
+  padding: 0 20px;
+  flex-shrink: 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-icon {
+  cursor: pointer;
+  color: var(--text-regular);
+  transition: color 0.2s;
+}
+
+.header-icon:hover {
+  color: var(--primary-color);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.user-avatar {
+  background: var(--primary-color);
+  color: #fff;
+}
+
+.username {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.main-content {
+  background: var(--bg-page);
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.fullscreen-page {
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.book-card {
+  transition: transform 0.2s;
+}
+
+.book-card:hover {
+  transform: translateY(-4px);
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-secondary);
+}
+
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.reader-container {
+  display: flex;
+  height: calc(100vh - var(--header-height) - 32px);
+}
+
+.reader-sidebar {
+  width: 60px;
+  background: #fff;
+  border-right: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 16px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.reader-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  overflow: hidden;
+}
+
+.reader-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-light);
+  text-align: center;
+}
+
+.reader-header h2 {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.reader-author {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.reader-chapter-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-light);
+  background: #fafafa;
+}
+
+.chapter-name {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.reader-text {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  line-height: 2;
+  font-size: 16px;
+}
+
+.reader-toc {
+  width: 260px;
+  background: #fff;
+  border-left: 1px solid var(--border-light);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.book-source-container, .manage-container {
+  padding: 0;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 64px !important;
+  }
+  .reader-toc {
+    display: none;
+  }
+}
+`
+
+export default css
