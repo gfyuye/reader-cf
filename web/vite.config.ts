@@ -6,7 +6,7 @@ import Components from 'unplugin-vue-components/vite';
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers';
 
 export default defineConfig({
-    base: '/web/',   // 新增：部署到 CF Pages 的子路径
+    base: '/',   // 新增：部署到 CF Pages 的子路径
   plugins: [
     vue(),
     AutoImport({
