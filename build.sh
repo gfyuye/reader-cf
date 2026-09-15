@@ -15,12 +15,6 @@ cd ..
 echo "==> Copying simple-web..."
 cp -r simple-web dist/web/simple-web
 
-# 3. SPA 回退：simple-web 优先，其余走 web 的 index.html
-echo "==> Generating _redirects..."
-cat > dist/web/_redirects <<'EOF'
-/simple-web/*  /simple-web/  200
-/*  /  200
-EOF
 
 echo "==> Build complete. Output in ./dist/"
 ls -la dist/
