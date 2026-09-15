@@ -5,3 +5,10 @@ dist
 .env
 .env.*
 !.env.example
+
+# 构建产物
+auto-imports.d.ts
+components.d.ts
+vite.config.js
+vite.config.d.ts
+*.tsbuildinfo
