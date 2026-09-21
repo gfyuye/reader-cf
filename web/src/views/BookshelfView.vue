@@ -21,7 +21,7 @@ const books = ref<Book[]>([])
 const groups = ref<BookGroup[]>([])
 const loading = ref(false)
 const searchQuery = ref('')
-const selectedGroup = ref(-1)
+const selectedGroup = ref('-1')
 const selectedBooks = ref<Set<string>>(new Set())
 const moveToGroupDialog = ref(false)
 const targetGroupId = ref<number>(-1)
@@ -91,7 +91,7 @@ function isBookInGroup(book: Book, groupId: number): boolean {
 const filteredBooks = computed(() => {
   let result = [...books.value]
   const currentGroup = Number(selectedGroup.value)
-  if (currentGroup !== -1) {
+  if (currentGroup !== -1 && !isNaN(currentGroup)) {
     result = result.filter((b) => isBookInGroup(b, currentGroup))
   }
   if (searchQuery.value) {
