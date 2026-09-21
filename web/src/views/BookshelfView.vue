@@ -90,8 +90,9 @@ function isBookInGroup(book: Book, groupId: number): boolean {
 
 const filteredBooks = computed(() => {
   let result = [...books.value]
-  if (selectedGroup.value !== -1) {
-    result = result.filter((b) => isBookInGroup(b, selectedGroup.value))
+  const currentGroup = Number(selectedGroup.value)
+  if (currentGroup !== -1) {
+    result = result.filter((b) => isBookInGroup(b, currentGroup))
   }
   if (searchQuery.value) {
     const kw = searchQuery.value.toLowerCase()
