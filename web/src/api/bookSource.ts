@@ -1,8 +1,12 @@
 import { get, post } from './http'
-import type { BookSource, BookGroup, Book } from './types'
+import type { BookSource, BookChapter } from './types'
 
 export async function getBookSources(userNameSpace?: string) {
   return get('/getBookSources', { userNameSpace })
+}
+
+export async function getBookSource(bookSourceUrl: string, userNameSpace?: string) {
+  return get('/getBookSource', { bookSourceUrl, userNameSpace })
 }
 
 export async function saveBookSource(bookSource: Partial<BookSource>, userNameSpace?: string) {
@@ -17,8 +21,16 @@ export async function deleteBookSource(sourceUrl: string, userNameSpace?: string
   return post('/deleteBookSource', { sourceUrl, userNameSpace })
 }
 
+export async function deleteBookSources(sourceUrls: string[], userNameSpace?: string) {
+  return post('/deleteBookSources', { sourceUrls, userNameSpace })
+}
+
 export async function deleteAllBookSources(userNameSpace?: string) {
   return post('/deleteAllBookSources', { userNameSpace })
+}
+
+export async function deleteBookSourcesFile(fileName: string, userNameSpace?: string) {
+  return post('/deleteBookSourcesFile', { fileName, userNameSpace })
 }
 
 export async function readSourceFile(file: File) {

@@ -62,7 +62,7 @@ export const useAppStore = defineStore('app', () => {
 
   async function initApp() {
     try {
-      const configRes = await axios.get(`${baseURL.value}/reader3/getSystemInfo`)
+      const configRes = await axios.get(`${baseURL.value}/getSystemInfo`)
       if (configRes.data?.isSuccess) {
         systemInfo.value = configRes.data.data
       }
@@ -74,7 +74,7 @@ export const useAppStore = defineStore('app', () => {
 
   async function loadConfig() {
     try {
-      const res = await axios.get(`${baseURL.value}/reader3/getSystemInfo`)
+      const res = await axios.get(`${baseURL.value}/getSystemInfo`)
       if (res.data?.isSuccess) {
         systemInfo.value = res.data.data
       }

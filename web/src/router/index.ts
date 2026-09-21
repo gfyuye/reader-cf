@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import { ElMessageBox, ElMessage } from 'element-plus'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -20,7 +21,7 @@ const routes: RouteRecordRaw[] = [
     path: '/reader/:bookUrl',
     name: 'Reader',
     component: () => import('@/views/ReaderView.vue'),
-    meta: { title: '阅读', icon: 'Reading' },
+    meta: { title: '阅读', icon: 'Reading', fullscreen: true },
     props: true,
   },
   {
@@ -133,7 +134,32 @@ router.beforeEach(async (to, from, next) => {
   }
 
   if (appStore.appConfig.secure && !authStore.token) {
-    next({ path: '/login' })
+    if (to.path !== '/login') {
+      next({ path: '/login' })
+    } else {
+      next()
+    }
+    return
+  }
+
+  if (to.meta.requiresAdmin && authStore.secureKey) {
+    next()
+    return
+  }
+
+  if (to.meta.requiresAdmin && !authStore.isManagerMode) {
+    try {
+      const { value } = await ElMessageBox.prompt('请输入管理密码', '管理模式', {
+        inputType: 'password',
+        cancelButtonText: '取消',
+        confirmButtonText: '确定',
+      })
+      authStore.enterManagerMode(value)
+      ElMessage.success('已进入管理模式')
+      next({ path: to.fullPath })
+    } catch {
+      next({ path: '/login' })
+    }
     return
   }
 

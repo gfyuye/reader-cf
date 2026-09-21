@@ -12,12 +12,12 @@ export async function restoreFromMongodb(userNameSpace?: string) {
   return post('/restoreFromMongodb', { userNameSpace })
 }
 
-export async function exportBook(bookUrl: string, fileName?: string) {
-  return post('/exportBook', { bookUrl, fileName })
+export async function exportBook(bookUrl: string, fileName?: string, userNameSpace?: string) {
+  return post('/exportBook', { bookUrl, fileName, userNameSpace })
 }
 
-export async function cacheBookOnServer(bookUrl: string) {
-  return post('/cacheBookOnServer', { bookUrl })
+export async function cacheBookOnServer(bookUrl: string, userNameSpace?: string) {
+  return post('/cacheBookOnServer', { bookUrl, userNameSpace })
 }
 
 export async function textToSpeech(params: Record<string, any>) {

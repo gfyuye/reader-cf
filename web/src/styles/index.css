@@ -1,4 +1,39 @@
-const css = `
+@font-face {
+  font-family: "reader-st";
+  src: local("Songti SC"), local("Noto Serif CJK SC"),
+    local("Source Han Serif SC"), local("Source Han Serif CN"), local("STSong"),
+    local("宋体"), local("明体"), local("明朝"), local("Songti"),
+    local("Songti TC"), local("Song S"), local("Song T"),
+    local("STBShusong"), local("TBMincho"), local("HYMyeongJo"),
+    local("DK-SONGTI");
+}
+
+@font-face {
+  font-family: "reader-fs";
+  src: local("STFangsong"), local("FangSong"), local("FangSong_GB2312"),
+    local("amasis30"), local("仿宋"), local("仿宋_GB2312"), local("Yuanti"),
+    local("Yuanti SC"), local("Yuanti TC"),
+    local("DK-FANGSONG");
+}
+
+@font-face {
+  font-family: "reader-kt";
+  src: local("Kaiti SC"), local("STKaiti"), local("Caecilia"), local("楷体"),
+    local("楷体_GB2312"), local("Kaiti"), local("Kaiti SC"), local("Kaiti TC"),
+    local("MKai PRC"), local("MKaiGB18030C-Medium"), local("MKaiGB18030C-Bold"),
+    local("DK-KAITI");
+}
+
+@font-face {
+  font-family: "reader-ht";
+  src: local("Noto Sans CJK SC"), local("Source Han Sans SC"),
+    local("Source Han Sans CN"), local("Microsoft YaHei"), local("PingFang SC"),
+    local("Hiragino Sans GB"), local("黑体"), local("微软雅黑"), local("Heiti"),
+    local("Heiti SC"), local("Heiti TC"), local("MYing Hei S"),
+    local("MYing Hei T"), local("TBGothic"),
+    local("DK-HEITI");
+}
+
 :root {
   --primary-color: #409eff;
   --text-primary: #303133;
@@ -11,6 +46,17 @@ const css = `
   --bg-page: #f0f2f5;
   --sidebar-width: 220px;
   --header-height: 60px;
+  --reader-bg: #f0f2f5;
+  --reader-content-bg: #fff;
+  --reader-text-color: #303133;
+  --reader-font-size: 16px;
+  --reader-line-height: 1.8;
+  --reader-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --reader-paragraph-space: 0.2em;
+  --reader-read-width: 800px;
+  --top-padding: 0px;
+  --bottom-padding: 0px;
+  --horizontal-padding: 20px;
 }
 
 * {
@@ -23,6 +69,78 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: var(--bg-page);
   color: var(--text-primary);
+}
+
+body.night-theme {
+  --bg-page: #121212;
+  --bg-color: #171717;
+  --text-primary: #ccc;
+  --text-regular: #aaa;
+  --text-secondary: #888;
+  --text-placeholder: #666;
+  --border-color: #333;
+  --border-light: #2a2a2a;
+  --sidebar-width: 220px;
+}
+
+body.mini-interface {
+  .popper-component {
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    box-sizing: border-box;
+    margin: 0 !important;
+    overflow-x: hidden;
+  }
+}
+
+body.night-theme .sidebar {
+  background: #1a1a1a;
+  border-right-color: #2a2a2a;
+}
+body.night-theme .sidebar-menu {
+  background: #1a1a1a;
+}
+body.night-theme .sidebar-menu .el-menu-item {
+  color: #aaa;
+}
+body.night-theme .sidebar-menu .el-menu-item:hover {
+  background-color: #2a2a2a !important;
+}
+body.night-theme .sidebar-menu .el-menu-item.is-active {
+  background-color: #409eff !important;
+  color: #fff;
+}
+body.night-theme .sidebar-footer .el-button {
+  color: #aaa;
+  border-color: #409eff;
+}
+body.night-theme .header {
+  background: #171717;
+  border-bottom-color: #2a2a2a;
+}
+body.night-theme .header-right,
+body.night-theme .header-left {
+  color: #aaa;
+}
+body.night-theme .main-content {
+  background: #121212;
+}
+body.night-theme .reader-sidebar {
+  background: #171717;
+  border-right-color: #2a2a2a;
+}
+body.night-theme .reader-header {
+  border-bottom-color: #2a2a2a;
+  background: #171717;
+}
+body.night-theme .reader-chapter-bar {
+  background: #1a1a1a;
+  border-bottom-color: #2a2a2a;
+}
+body.night-theme .loading,
+body.night-theme .empty {
+  color: #888;
 }
 
 #app {
@@ -260,6 +378,205 @@ body {
   padding: 0;
 }
 
+.reader-page {
+  height: calc(100vh - var(--header-height, 60px));
+  display: flex;
+  flex-direction: column;
+  background: var(--reader-bg);
+  color: var(--reader-text-color);
+  overflow: hidden;
+}
+
+.reader-page.night {
+  --reader-bg: var(--body-bg, #121212);
+  --reader-content-bg: var(--content-bg, #171717);
+  --reader-text-color: var(--text-color, #666);
+}
+
+.reader-page.night .reader-toolbar,
+.reader-page.night .reader-nav-bar {
+  background: var(--reader-content-bg);
+  border-bottom-color: #2a2a2a;
+}
+
+.reader-page.night .reader-sidebar {
+  background: var(--reader-content-bg);
+}
+
+.reader-toolbar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--reader-content-bg, #fff);
+  border-bottom: 1px solid var(--border-light, #e4e7ed);
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
+}
+
+.reader-toolbar.hidden {
+  transform: translateY(-100%);
+}
+
+.toolbar-center {
+  flex: 1;
+  text-align: center;
+  font-size: 16px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.book-title {
+  color: var(--reader-text-color);
+}
+
+.book-author {
+  color: var(--el-text-color-secondary);
+  font-weight: normal;
+}
+
+.toolbar-right {
+  display: flex;
+  gap: 4px;
+}
+
+.toolbar-right .el-button {
+  padding: 8px 12px;
+}
+
+.reader-nav-bar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--reader-content-bg, #fff);
+  border-bottom: 1px solid var(--border-light, #e4e7ed);
+  flex-shrink: 0;
+}
+
+.chapter-title {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reader-content-wrapper {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.toc-sidebar {
+  width: 260px;
+  border-right: 1px solid var(--border-light, #e4e7ed);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.reader-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--horizontal-padding, 20px);
+  padding-top: var(--top-padding, 0);
+  padding-bottom: var(--bottom-padding, 0);
+  box-sizing: border-box;
+  background: var(--reader-bg);
+}
+
+.reader-content .chapter-content {
+  font-size: var(--reader-font-size, 16px);
+  line-height: var(--reader-line-height, 1.8);
+  color: var(--reader-text-color);
+  max-width: var(--reader-read-width, 800px);
+  margin: 0 auto;
+}
+
+.reader-content .chapter-content :global(p) {
+  text-indent: 2em;
+  margin: 0 0 1em 0;
+}
+
+.reader-content .chapter-content :global(img) {
+  max-width: 100%;
+  height: auto;
+}
+
+.reader-content .chapter-content :global(h1),
+.reader-content .chapter-content :global(h2),
+.reader-content .chapter-content :global(h3) {
+  margin: 1em 0 0.5em 0;
+  font-weight: bold;
+}
+
+.reader-content.slide-mode,
+.reader-content.scroll-mode,
+.reader-content.page-mode,
+.reader-content.auto-mode {
+  background: var(--reader-bg);
+}
+
+.chapter-loading {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--el-text-color-secondary);
+}
+
+.loading-icon {
+  margin-bottom: 16px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.reader-scrollbar-nav {
+  position: fixed;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reader-loading {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--el-text-color-secondary);
+}
+
+.cache-progress-bar {
+  padding: 8px 16px;
+  background: var(--reader-content-bg, #fff);
+  border-bottom: 1px solid var(--border-light, #e4e7ed);
+  flex-shrink: 0;
+}
+
+.cache-progress-bar .el-progress {
+  margin-bottom: 4px;
+}
+
+.cache-tip {
+  margin: 4px 0 8px 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  text-align: center;
+}
+
 @media (max-width: 768px) {
   .sidebar {
     width: 64px !important;
@@ -268,6 +585,12 @@ body {
     display: none;
   }
 }
-`
 
-export default css
+.virtual-list {
+  height: calc(100vh - 220px);
+  min-height: 500px;
+}
+
+:deep(.vue-recycle-scroller) {
+  height: 100%;
+}

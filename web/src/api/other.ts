@@ -21,16 +21,20 @@ export async function deleteBookmarks(bookmarks: Bookmark[]) {
   return post('/deleteBookmarks', { bookmarks })
 }
 
-export async function getBookGroups() {
-  return get('/getBookGroups')
+export async function deleteBookmarksByTime(times: number[]) {
+  return post('/deleteBookmarks', { times })
+}
+
+export async function getBookGroups(userNameSpace?: string) {
+  return get('/getBookGroups', { userNameSpace })
 }
 
 export async function saveBookGroup(group: Partial<BookGroup>) {
   return post('/saveBookGroup', group)
 }
 
-export async function deleteBookGroup(groupId: number) {
-  return post('/deleteBookGroup', { groupId })
+export async function deleteBookGroup(groupId: number, userNameSpace?: string) {
+  return post('/deleteBookGroup', { groupId, userNameSpace })
 }
 
 export async function saveBookGroupOrder(groups: BookGroup[]) {
