@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, shallowRef } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getBookshelf as apiGetBookshelf, saveBook as apiSaveBook, deleteBook as apiDeleteBook, deleteBooks as apiDeleteBooks, saveBookGroupId, addBookGroupMulti, removeBookGroupMulti, getShelfBookWithCacheInfo } from '@/api/book'
 import { getBookGroups } from '@/api/other'
@@ -75,24 +75,23 @@ async function loadGroups() {
   }
 }
 
+// 位运算判断书籍是否属于某分组（兼容原版 Long 位运算逻辑）
+function isBookInGroup(book: Book, groupId: number): boolean {
+  const bookGroup = book.group || 0
+  if (groupId === -1) return true
+  if (groupId === -2) return book.origin === 'loc_book'
+  if (groupId === -3) return book.kind === 1 // 音频书
+  if (groupId === -4) return bookGroup === 0
+  if (groupId === -5) return !!book.lastCheckError
+  if (groupId === 0) return true // 未分组
+  // 位运算：book.group & groupId > 0
+  return (bookGroup & groupId) > 0
+}
+
 const filteredBooks = computed(() => {
   let result = [...books.value]
   if (selectedGroup.value !== -1) {
-    const group = groups.value.find((g) => g.groupId === selectedGroup.value)
-    if (group && group.groupName !== '全部') {
-      const groupName = group.groupName
-      if (groupName === '本地') {
-        result = result.filter((b) => b.isLocal)
-      } else if (groupName === '音频') {
-        result = result.filter((b) => b.kind === 'audio')
-      } else if (groupName === '更新错误') {
-        result = result.filter((b) => b.lastCheckError)
-      } else if (groupName === '未分组') {
-        result = result.filter((b) => !b.group || b.group === '')
-      } else {
-        result = result.filter((b) => b.group === groupName || b.groupId === group.groupId)
-      }
-    }
+    result = result.filter((b) => isBookInGroup(b, selectedGroup.value))
   }
   if (searchQuery.value) {
     const kw = searchQuery.value.toLowerCase()
@@ -103,6 +102,10 @@ const filteredBooks = computed(() => {
 
 function getGroupName(groupId: number): string {
   return groups.value.find((g) => g.groupId === groupId)?.groupName || ''
+}
+
+function getGroupBookCount(groupId: number): number {
+  return books.value.filter((b) => isBookInGroup(b, groupId)).length
 }
 
 const sortedBooks = computed(() => {
@@ -211,16 +214,24 @@ async function showCacheInfo(book: Book) {
       </el-col>
     </el-row>
 
+    <!-- 分组标签页，模仿原版 el-tabs 横向布局 -->
     <el-row :gutter="20" style="margin-bottom: 16px;">
       <el-col :span="20">
-        <el-menu :mode="'horizontal'" :default-active="String(selectedGroup)" @select="(key: string) => selectedGroup = parseInt(key)">
-          <el-menu-item v-for="group in groups" :key="group.groupId" :index="String(group.groupId)">
-            {{ group.groupName }}
-            <el-tag v-if="group.groupName !== '全部'" size="small" type="info" style="margin-left: 4px;">
-              {{ books.filter(b => b.groupId === group.groupId || (group.groupName === '本地' && b.isLocal)).length }}
-            </el-tag>
-          </el-menu-item>
-        </el-menu>
+        <el-tabs v-model="selectedGroup" type="card" @tab-click="() => {}">
+          <el-tab-pane
+            v-for="group in groups"
+            :key="group.groupId"
+            :label="group.groupName"
+            :name="String(group.groupId)"
+          >
+            <template #label>
+              <span>{{ group.groupName }}</span>
+              <el-tag v-if="group.groupName !== '全部'" size="small" type="info" style="margin-left: 4px;">
+                {{ getGroupBookCount(group.groupId) }}
+              </el-tag>
+            </template>
+          </el-tab-pane>
+        </el-tabs>
       </el-col>
       <el-col :span="4" style="text-align: right;">
         <el-dropdown v-if="selectedBooks.size > 0" @command="(cmd: string) => cmd === 'move' ? moveToGroupDialog = true : batchDelete()" placement="top-end">
@@ -235,6 +246,13 @@ async function showCacheInfo(book: Book) {
       </el-col>
     </el-row>
 
+    <!-- 搜索栏 -->
+    <el-row :gutter="20" style="margin-bottom: 16px;">
+      <el-col :span="24">
+        <el-input v-model="searchQuery" placeholder="搜索书架..." :prefix-icon="Search" style="width: 100%" />
+      </el-col>
+    </el-row>
+
     <el-row :gutter="16">
       <RecycleScroller
         class="virtual-list"
@@ -243,7 +261,7 @@ async function showCacheInfo(book: Book) {
         key-field="bookUrl"
         v-slot="{ item: book }"
       >
-        <el-col :xs="12" :sm="8" :md="6" :lg="4">
+        <div style="width: 100%; padding: 0 8px; box-sizing: border-box;">
           <el-card
             shadow="hover"
             class="book-card"
@@ -279,7 +297,7 @@ async function showCacheInfo(book: Book) {
               <el-button type="text" size="small" :icon="Delete" @click.stop="deleteBook(book.bookUrl)" />
             </template>
           </el-card>
-        </el-col>
+        </div>
       </RecycleScroller>
     </el-row>
 
@@ -374,11 +392,19 @@ async function showCacheInfo(book: Book) {
 }
 
 .virtual-list {
-  height: calc(100vh - 220px);
+  height: calc(100vh - 280px);
   min-height: 500px;
 }
 
 :deep(.vue-recycle-scroller) {
   height: 100%;
+}
+
+:deep(.el-tabs__nav-wrap) {
+  overflow-x: auto;
+}
+
+:deep(.el-tabs__nav) {
+  min-width: max-content;
 }
 </style>
