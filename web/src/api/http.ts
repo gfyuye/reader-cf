@@ -2,8 +2,10 @@ import axios from 'axios'
 import type { AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import type { ApiResult } from './types'
 
+const API_BASE = import.meta.env.VITE_API_BASE || '/reader3'
+
 const http = axios.create({
-  baseURL: '/reader3',
+  baseURL: API_BASE,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
 })

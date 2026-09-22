@@ -6,6 +6,8 @@ import Components from 'unplugin-vue-components/vite';
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const API_TARGET = process.env.VITE_API_TARGET || 'http://localhost:8080';
+
 export default defineConfig({
   base: '/',
   plugins: [
@@ -95,7 +97,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/reader3': {
-        target: 'http://localhost:8080',
+        target: API_TARGET,
         changeOrigin: true,
       },
     },
