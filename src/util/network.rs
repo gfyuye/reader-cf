@@ -105,6 +105,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_allowed_urls() {
-        assert!(validate_safe_url("https://example.com").await.is_ok());
+        // Use a public IP literal so the assertion does not depend on live DNS
+        // resolution (some environments resolve every hostname to a reserved
+        // benchmarking range such as 198.18.0.0/15, which is blocked by design).
+        assert!(validate_safe_url("https://93.184.216.34").await.is_ok());
     }
 }

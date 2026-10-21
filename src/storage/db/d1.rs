@@ -1,7 +1,7 @@
 use crate::error::error::AppError;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::time::Duration;
 
 #[derive(Clone)]

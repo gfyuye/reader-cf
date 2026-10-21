@@ -61,18 +61,22 @@ impl Drop for RateGuard {
     fn drop(&mut self) {
         if let Some(url) = self.source_url.take() {
             let states = self.states.clone();
-            if let Ok(mut guard) = states.try_write() {
-                if let Some(state) = guard.get_mut(&url) {
-                    state.in_flight = false;
-                }
-            } else {
-                tokio::spawn(async move {
-                    let mut guard = states.write().await;
+            match states.try_write() {
+                Ok(mut guard) => {
                     if let Some(state) = guard.get_mut(&url) {
                         state.in_flight = false;
                     }
-                });
-            }
+                }
+                Err(_) => {
+                    let states = states.clone();
+                    tokio::spawn(async move {
+                        let mut guard = states.write().await;
+                        if let Some(state) = guard.get_mut(&url) {
+                            state.in_flight = false;
+                        }
+                    });
+                }
+            };
         }
     }
 }

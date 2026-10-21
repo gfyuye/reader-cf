@@ -9,6 +9,8 @@
  * - JsSandbox: Native V8, java.*, source.*, book.*, CryptoJS/WebCrypto AES/MD5/SHA
  */
 
+import { md5Hex } from "./md5";
+
 // ==========================================
 // 1. Delimiter & Top-Level Rule Splitting
 // ==========================================
