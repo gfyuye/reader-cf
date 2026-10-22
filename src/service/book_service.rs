@@ -14,6 +14,7 @@ use crate::parser::js::{eval_js, eval_js_with_bindings, with_js_lib};
 use crate::parser::rule_engine::RuleEngine;
 use crate::storage::cache::file_cache::FileCache;
 use crate::util::hash::md5_hex;
+use crate::util::network::validate_safe_url;
 use crate::util::text::{normalize_source_url, repair_encoded_url};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -1084,6 +1085,10 @@ impl BookService {
     }
 
     pub async fn get_cover(&self, user_ns: &str, url: &str) -> Result<(Vec<u8>, String), AppError> {
+        // SSRF 防护：封面请求必须走外部公网地址，禁止访问私有/回环/链路本地/元数据服务等
+        validate_safe_url(url)
+            .await
+            .map_err(|e| AppError::BadRequest(format!("invalid cover url: {}", e)))?;
         let ext = file_ext_from_url(url).unwrap_or_else(|| "png".to_string());
         let name = md5_hex(url);
         let path = self
