@@ -818,7 +818,10 @@ pub async fn get_book_content(
                 .book_service
                 .get_chapter_list_with_cache(&user_ns, &source, toc_url, do_refresh)
                 .await?;
-            let idx = req.index.unwrap() as usize;
+            let idx = req
+                .index
+                .ok_or_else(|| AppError::BadRequest("index required".to_string()))?
+                as usize;
 
             if idx >= chapters.len() {
                 // If index is out of range, it's possible our cache was partial (first page only).
@@ -1844,14 +1847,8 @@ pub async fn search_book_multi_sse(
     let last_index = q.last_index.unwrap_or(-1);
     let search_size = q.search_size.unwrap_or(50).max(1) as usize;
     let concurrent = q.concurrent_count.unwrap_or(24).max(1) as usize;
-    let book_source_url =
-        q.book_source_url
-            .clone()
-            .and_then(|u| if u.trim().is_empty() { None } else { Some(u) });
-    let book_source_group =
-        q.book_source_group
-            .clone()
-            .and_then(|g| if g.trim().is_empty() { None } else { Some(g) });
+    let book_source_url = q.book_source_url.clone().filter(|u| !u.trim().is_empty());
+    let book_source_group = q.book_source_group.clone().filter(|g| !g.trim().is_empty());
 
     let (tx, rx) = mpsc::channel::<Event>(16);
     let state_clone = state.clone();
@@ -1957,7 +1954,11 @@ pub async fn search_book_multi_sse(
                         if !batch.is_empty() {
                             total += batch.len();
                             let payload = serde_json::json!({"lastIndex": cur_idx, "data": batch});
-                            if tx.send(Event::default().data(payload.to_string())).await.is_err() {
+                            if tx
+                                .send(Event::default().data(payload.to_string()))
+                                .await
+                                .is_err()
+                            {
                                 break;
                             }
                         }
@@ -2002,10 +2003,7 @@ pub async fn search_book_source_sse(
     let search_size = q.search_size.unwrap_or(30).max(1) as usize;
     let refresh = q.refresh.unwrap_or(0) > 0;
     let concurrent = std::cmp::max(search_size * 2, 24);
-    let book_source_group =
-        q.book_source_group
-            .clone()
-            .and_then(|g| if g.trim().is_empty() { None } else { Some(g) });
+    let book_source_group = q.book_source_group.clone().filter(|g| !g.trim().is_empty());
 
     let (tx, rx) = mpsc::channel::<Event>(16);
     let state_clone = state.clone();
@@ -2224,8 +2222,9 @@ pub async fn get_available_book_source(
     while cursor < sources.len() {
         let batch_end = (cursor + concurrent_count).min(sources.len());
         let mut tasks: FuturesUnordered<_> = FuturesUnordered::new();
-        for source_index in cursor..batch_end {
-            let source = sources[source_index].clone();
+        for (i, source) in sources[cursor..batch_end].iter().enumerate() {
+            let source_index = cursor + i;
+            let source = source.clone();
             let svc = state.book_service.clone();
             let name = book.name.clone();
             let author = book.author.clone();
@@ -2644,10 +2643,10 @@ async fn resolve_book_source(
     if let Some(url) = &book_source_url {
         let normalized = normalize_source_url(url);
         if !normalized.is_empty() {
-            if let Some(src) = state.book_source_service.get(&user_ns, &normalized).await? {
+            if let Some(src) = state.book_source_service.get(user_ns, &normalized).await? {
                 return Ok(src);
             }
-            let sources = state.book_source_service.list(&user_ns).await?;
+            let sources = state.book_source_service.list(user_ns).await?;
             if let Some(src) = sources
                 .into_iter()
                 .find(|s| normalize_source_url(&s.book_source_url) == normalized)
@@ -2660,17 +2659,17 @@ async fn resolve_book_source(
 
     // Try to find book_source_url from shelf book
     if let Some(b_url) = book_url {
-        if let Ok(Some(shelf_book)) = state.book_service.get_shelf_book(&user_ns, b_url).await {
+        if let Ok(Some(shelf_book)) = state.book_service.get_shelf_book(user_ns, b_url).await {
             let shelf_origin = normalize_source_url(&shelf_book.origin);
             if !shelf_origin.is_empty() {
                 if let Some(src) = state
                     .book_source_service
-                    .get(&user_ns, &shelf_origin)
+                    .get(user_ns, &shelf_origin)
                     .await?
                 {
                     return Ok(src);
                 }
-                let sources = state.book_source_service.list(&user_ns).await?;
+                let sources = state.book_source_service.list(user_ns).await?;
                 if let Some(src) = sources
                     .into_iter()
                     .find(|s| normalize_source_url(&s.book_source_url) == shelf_origin)
@@ -2690,7 +2689,7 @@ async fn resolve_book_source(
         if !b_host.is_empty() {
             // Extract root domain for comparison (e.g., "22biqu" from "m.22biqu.com")
             let b_root = extract_root_domain(&b_host);
-            let sources = state.book_source_service.list(&user_ns).await?;
+            let sources = state.book_source_service.list(user_ns).await?;
             for s in sources {
                 let normalized_source_url = normalize_source_url(&s.book_source_url);
                 if let Ok(s_url) = url::Url::parse(&normalized_source_url) {

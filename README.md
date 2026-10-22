@@ -5,6 +5,7 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Cloudflare Pages](https://img.shields.io/badge/Deploy-Cloudflare_Pages-orange.svg)](https://pages.cloudflare.com/)
 [![Cloudflare Workers](https://img.shields.io/badge/Edge-Cloudflare_Workers-blue.svg)](https://workers.cloudflare.com/)
+[![CI](https://github.com/gfyuye/reader-rust-cf/actions/workflows/ci.yml/badge.svg)](https://github.com/gfyuye/reader-rust-cf/actions/workflows/ci.yml)
 
 ---
 

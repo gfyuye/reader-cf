@@ -298,10 +298,19 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   }
 
   const existing = await env.DB.prepare(
-    `SELECT username, password, salt, token, is_admin FROM users WHERE username = ?1`
+    `SELECT username, password, salt, token, is_admin, enable_webdav, enable_local_store, enable_ai_model FROM users WHERE username = ?1`
   )
     .bind(username)
-    .first<{ username: string; password: string; salt: string; token: string; is_admin: number }>();
+    .first<{
+      username: string;
+      password: string;
+      salt: string;
+      token: string;
+      is_admin: number;
+      enable_webdav: number;
+      enable_local_store: number;
+      enable_ai_model: number;
+    }>();
 
   if (existing) {
     if (!isLogin) {
@@ -353,7 +362,7 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
     return jsonResponse({ isSuccess: false, errorMsg: "系统注册用户数已达上限" });
   }
 
-  const isAdmin = 0; // Registered users are never auto-admin; admin access requires SECURE_KEY verification
+  const isAdmin: number = 0; // Registered users are never auto-admin; admin access requires SECURE_KEY verification
   const salt = randomString(8);
   const encrypted = genEncryptedPassword(password, salt);
   const now = Math.floor(Date.now() / 1000);
@@ -795,7 +804,7 @@ async function fetchTextWithEncoding(resp: Response): Promise<string> {
   }
 
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(buf);
   } catch {
     try {
       return new TextDecoder("gb18030").decode(buf);
@@ -1470,7 +1479,7 @@ async function handleUploadFile(request: Request, env: Env): Promise<Response> {
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
   const formData = await request.formData();
-  const file = formData.get("file") as File | null;
+  const file = formData.get("file") as unknown as File | null;
   if (!file) return jsonResponse({ isSuccess: false, errorMsg: "缺少上传文件" });
 
   const rawName = file.name || "file";
@@ -1558,7 +1567,7 @@ async function handleEpubUpload(request: Request, env: Env): Promise<Response> {
     const contentType = request.headers.get("Content-Type") || "";
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
-      const file = formData.get("file") as File | null;
+      const file = formData.get("file") as unknown as File | null;
       if (!file) return jsonResponse({ isSuccess: false, errorMsg: "缺少 EPUB 文件" });
       fileName = file.name || "book.epub";
       bodyBytes = new Uint8Array(await file.arrayBuffer());
@@ -1828,7 +1837,7 @@ async function handlePdfUpload(request: Request, env: Env): Promise<Response> {
     const contentType = request.headers.get("Content-Type") || "";
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
-      const file = formData.get("file") as File | null;
+      const file = formData.get("file") as unknown as File | null;
       if (!file) return jsonResponse({ isSuccess: false, errorMsg: "缺少 PDF 文件" });
       fileName = file.name || "book.pdf";
       bodyBytes = new Uint8Array(await file.arrayBuffer());
@@ -1913,6 +1922,8 @@ async function handlePdfStream(request: Request, env: Env): Promise<Response> {
 
   const rangeHeader = request.headers.get("Range");
   const r2Options: R2GetOptions = {};
+  let rangeOffset = 0;
+  let rangeLength: number | undefined;
 
   if (rangeHeader) {
     const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
@@ -1926,6 +1937,8 @@ async function handlePdfStream(request: Request, env: Env): Promise<Response> {
       const rawEnd = match[2] ? parseInt(match[2], 10) : undefined;
       const end = rawEnd !== undefined ? Math.min(rawEnd, book.file_size - 1) : book.file_size - 1;
       const length = Math.max(0, end - offset + 1);
+      rangeOffset = offset;
+      rangeLength = length;
       r2Options.range = { offset, length };
     }
   }
@@ -1936,10 +1949,13 @@ async function handlePdfStream(request: Request, env: Env): Promise<Response> {
 
   if (obj) {
     bodyStream = obj.body;
-    byteLen = (obj as any).range?.length || (book.file_size - (r2Options.range && "offset" in r2Options.range ? r2Options.range.offset : 0));
+    byteLen = rangeLength !== undefined ? rangeLength : Math.max(0, book.file_size - rangeOffset);
   } else {
     // Fallback to remote WebDAV
-    const remoteBytes = await fallbackFetchFromRemoteWebdav(env, book.r2_key, r2Options.range);
+    const remoteBytes = await fallbackFetchFromRemoteWebdav(env, book.r2_key, {
+      offset: rangeOffset,
+      length: rangeLength,
+    });
     if (remoteBytes) {
       bodyStream = remoteBytes;
       byteLen = remoteBytes.length;
@@ -1953,10 +1969,9 @@ async function handlePdfStream(request: Request, env: Env): Promise<Response> {
   headers.set("Accept-Ranges", "bytes");
   headers.set("Access-Control-Expose-Headers", "Accept-Ranges, Content-Range, Content-Length");
 
-  if (r2Options.range && "offset" in r2Options.range) {
-    const offset = r2Options.range.offset;
-    const end = offset + byteLen - 1;
-    headers.set("Content-Range", `bytes ${offset}-${end}/${book.file_size}`);
+  if (rangeLength !== undefined) {
+    const end = rangeOffset + byteLen - 1;
+    headers.set("Content-Range", `bytes ${rangeOffset}-${end}/${book.file_size}`);
     headers.set("Content-Length", byteLen.toString());
     return new Response(bodyStream, { status: 206, headers });
   }
@@ -3401,7 +3416,7 @@ function decodeTxtBytes(bytes: Uint8Array): string {
     return new TextDecoder("utf-8").decode(bytes.subarray(3));
   }
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
   } catch {
     try {
       return new TextDecoder("gb18030").decode(bytes);
@@ -3485,7 +3500,7 @@ async function handleTxtUpload(request: Request, env: Env, ctx: ExecutionContext
     const contentType = request.headers.get("Content-Type") || "";
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
-      const file = formData.get("file") as File | null;
+      const file = formData.get("file") as unknown as File | null;
       if (!file) return jsonResponse({ isSuccess: false, errorMsg: "缺少 TXT 文件" });
       fileName = file.name || "book.txt";
       fileBuffer = await file.arrayBuffer();
@@ -3895,7 +3910,7 @@ async function handleChunkedUploadPart(request: Request, env: Env): Promise<Resp
   const contentType = request.headers.get("Content-Type") || "";
   if (contentType.includes("multipart/form-data")) {
     const formData = await request.formData();
-    const file = formData.get("chunk") as File | null;
+    const file = formData.get("chunk") as unknown as File | null;
     if (!file) return jsonResponse({ isSuccess: false, errorMsg: "缺少分片数据" });
     partBytes = new Uint8Array(await file.arrayBuffer());
   } else {
@@ -5086,7 +5101,10 @@ async function handleUploadFileToWebdav(request: Request, env: Env): Promise<Res
   const dirPath = (formData.get("path") as string || "/").replace(/^\/+/, "").replace(/\/$/, "");
   const prefix = dirPath ? `webdav/${userNs}/${dirPath}/` : `webdav/${userNs}/`;
 
-  for (const [key, value] of formData.entries()) {
+  for (const [key, rawValue] of formData.entries()) {
+    // @cloudflare/workers-types models FormData values as `string`, but the
+    // runtime returns a File for file inputs, so widen before the check.
+    const value = rawValue as unknown as File | string;
     if (key.startsWith("file") && value instanceof File) {
       const safeName = value.name.replace(/[/\\?%*:|"<>]/g, "_");
       await env.BUCKET.put(`${prefix}${safeName}`, await value.arrayBuffer(), {

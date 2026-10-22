@@ -111,6 +111,7 @@ impl KitesurfCooldownTracker {
         }
     }
 
+    #[allow(dead_code)]
     pub fn clear_cooldown(&self) {
         if let Ok(mut until_lock) = self.cooldown_until.write() {
             *until_lock = None;
@@ -118,6 +119,12 @@ impl KitesurfCooldownTracker {
         if let Ok(mut day_lock) = self.cooldown_utc_day.write() {
             *day_lock = None;
         }
+    }
+}
+
+impl Default for KitesurfCooldownTracker {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -135,6 +142,7 @@ impl WebViewDispatcher {
         }
     }
 
+    #[allow(dead_code)]
     pub fn tracker(&self) -> &KitesurfCooldownTracker {
         &self.tracker
     }
@@ -165,7 +173,10 @@ impl WebViewDispatcher {
                 }
             }
         } else if self.config.has_kitesurf() {
-            tracing::debug!("Kitesurf 正处于限流冷却期中，请求直接转发至远方 API: {}", req.url);
+            tracing::debug!(
+                "Kitesurf 正处于限流冷却期中，请求直接转发至远方 API: {}",
+                req.url
+            );
         }
 
         // Step 2: In cooldown or after Kitesurf failure, request goes directly to remote WebView API

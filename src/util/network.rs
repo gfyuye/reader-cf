@@ -95,10 +95,16 @@ mod tests {
     async fn test_blocked_urls() {
         assert!(validate_safe_url("http://127.0.0.1/admin").await.is_err());
         assert!(validate_safe_url("http://localhost:8080").await.is_err());
-        assert!(validate_safe_url("http://192.168.1.1/secret").await.is_err());
+        assert!(validate_safe_url("http://192.168.1.1/secret")
+            .await
+            .is_err());
         assert!(validate_safe_url("http://10.0.0.1/").await.is_err());
         assert!(validate_safe_url("http://172.16.0.1/").await.is_err());
-        assert!(validate_safe_url("http://169.254.169.254/latest/meta-data/").await.is_err());
+        assert!(
+            validate_safe_url("http://169.254.169.254/latest/meta-data/")
+                .await
+                .is_err()
+        );
         assert!(validate_safe_url("ftp://example.com/file").await.is_err());
         assert!(validate_safe_url("http://[::1]/").await.is_err());
     }

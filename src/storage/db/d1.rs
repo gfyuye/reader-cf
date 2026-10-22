@@ -1,3 +1,5 @@
+// Staged for the Cloudflare-parity runtime; not yet wired into the server binary.
+#![allow(dead_code)]
 use crate::error::error::AppError;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -63,11 +65,7 @@ impl D1Client {
         )
     }
 
-    pub async fn query_all(
-        &self,
-        sql: &str,
-        params: &[Value],
-    ) -> Result<Vec<Value>, AppError> {
+    pub async fn query_all(&self, sql: &str, params: &[Value]) -> Result<Vec<Value>, AppError> {
         let payload = D1QueryRequest { sql, params };
         let resp = self
             .http
@@ -91,7 +89,10 @@ impl D1Client {
                 .and_then(|errs| errs.into_iter().next())
                 .map(|e| e.message)
                 .unwrap_or_else(|| format!("HTTP status {}", status));
-            return Err(AppError::Internal(anyhow::anyhow!("D1 query failed: {}", err_msg)));
+            return Err(AppError::Internal(anyhow::anyhow!(
+                "D1 query failed: {}",
+                err_msg
+            )));
         }
 
         let rows = body
@@ -112,11 +113,7 @@ impl D1Client {
         Ok(rows.into_iter().next())
     }
 
-    pub async fn execute(
-        &self,
-        sql: &str,
-        params: &[Value],
-    ) -> Result<u64, AppError> {
+    pub async fn execute(&self, sql: &str, params: &[Value]) -> Result<u64, AppError> {
         let payload = D1QueryRequest { sql, params };
         let resp = self
             .http
@@ -140,7 +137,10 @@ impl D1Client {
                 .and_then(|errs| errs.into_iter().next())
                 .map(|e| e.message)
                 .unwrap_or_else(|| format!("HTTP status {}", status));
-            return Err(AppError::Internal(anyhow::anyhow!("D1 execute failed: {}", err_msg)));
+            return Err(AppError::Internal(anyhow::anyhow!(
+                "D1 execute failed: {}",
+                err_msg
+            )));
         }
 
         let changes = body

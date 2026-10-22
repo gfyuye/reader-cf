@@ -1,3 +1,5 @@
+// Staged for the Cloudflare-parity runtime; not yet wired into the server binary.
+#![allow(dead_code)]
 use crate::error::error::AppError;
 use crate::storage::db::d1::D1Client;
 use crate::storage::r2::R2Client;
@@ -52,7 +54,11 @@ impl TxtStreamService {
 
         // 1. Upload clean UTF-8 bytes to R2
         self.r2
-            .put_object(r2_key, utf8_bytes.to_vec(), Some("text/plain; charset=utf-8"))
+            .put_object(
+                r2_key,
+                utf8_bytes.to_vec(),
+                Some("text/plain; charset=utf-8"),
+            )
             .await?;
 
         // 2. Scan chapter headings and calculate byte offsets
@@ -161,15 +167,46 @@ impl TxtStreamService {
             .ok_or_else(|| AppError::BadRequest("未找到该 TXT 书籍".to_string()))?;
 
         Ok(TxtBookInfo {
-            book_id: row.get("book_id").and_then(Value::as_str).unwrap_or_default().to_string(),
-            user_ns: row.get("user_ns").and_then(Value::as_str).unwrap_or_default().to_string(),
-            file_name: row.get("file_name").and_then(Value::as_str).unwrap_or_default().to_string(),
-            r2_key: row.get("r2_key").and_then(Value::as_str).unwrap_or_default().to_string(),
+            book_id: row
+                .get("book_id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            user_ns: row
+                .get("user_ns")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            file_name: row
+                .get("file_name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            r2_key: row
+                .get("r2_key")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
             file_size: row.get("file_size").and_then(Value::as_i64).unwrap_or(0) as u64,
-            total_chapters: row.get("total_chapters").and_then(Value::as_i64).unwrap_or(0) as i32,
-            title: row.get("title").and_then(Value::as_str).unwrap_or_default().to_string(),
-            author: row.get("author").and_then(Value::as_str).unwrap_or_default().to_string(),
-            status: row.get("status").and_then(Value::as_str).unwrap_or("ready").to_string(),
+            total_chapters: row
+                .get("total_chapters")
+                .and_then(Value::as_i64)
+                .unwrap_or(0) as i32,
+            title: row
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            author: row
+                .get("author")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            status: row
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("ready")
+                .to_string(),
         })
     }
 
@@ -185,9 +222,17 @@ impl TxtStreamService {
         let list = rows
             .into_iter()
             .map(|r| TxtChapterItem {
-                book_id: r.get("book_id").and_then(Value::as_str).unwrap_or_default().to_string(),
+                book_id: r
+                    .get("book_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
                 chapter_index: r.get("chapter_index").and_then(Value::as_i64).unwrap_or(0) as i32,
-                title: r.get("title").and_then(Value::as_str).unwrap_or_default().to_string(),
+                title: r
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
                 byte_offset: r.get("byte_offset").and_then(Value::as_i64).unwrap_or(0) as u64,
                 byte_length: r.get("byte_length").and_then(Value::as_i64).unwrap_or(0) as u64,
             })

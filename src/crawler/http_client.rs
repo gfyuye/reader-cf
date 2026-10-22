@@ -9,6 +9,7 @@ pub struct HttpClient {
 }
 
 impl HttpClient {
+    #[allow(dead_code)]
     pub fn new(timeout_secs: u64, proxy: Option<String>) -> anyhow::Result<Self> {
         Self::with_webview(timeout_secs, proxy, WebViewConfig::default())
     }

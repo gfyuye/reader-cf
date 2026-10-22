@@ -129,6 +129,7 @@ async fn ai_book_memory_round_trips_and_isolated_by_user() {
 }
 
 #[tokio::test]
+#[allow(clippy::field_reassign_with_default)]
 async fn ai_book_memory_rejects_mismatched_book_url_on_save() {
     let (service, storage_dir) = create_service("mismatch").await;
 

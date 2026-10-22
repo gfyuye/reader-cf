@@ -915,7 +915,7 @@ mod tests {
             .can_use_ai_model(Some(access_token), None)
             .await
             .unwrap());
-        assert!(service.load_users().await.unwrap().get("reader1").is_some());
+        assert!(service.load_users().await.unwrap().contains_key("reader1"));
         let _ = fs::remove_dir_all(temp_dir).await;
     }
 

@@ -6,6 +6,8 @@
   "scripts": {
     "prebuild": "node scripts/generate-env-defaults.cjs",
     "build": "npm --prefix frontend install && npm --prefix frontend run build && node -e \"const fs=require('fs'); if(fs.existsSync('frontend/dist')&&!fs.existsSync('dist')){fs.cpSync('frontend/dist','dist',{recursive:true})}\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "bundle:check": "esbuild \"functions/[[path]].ts\" --bundle --format=esm --platform=neutral --outdir=.tmp/bundle-check --log-level=warning",
     "deploy": "node scripts/setup-cf.cjs",
     "setup:cf": "node scripts/setup-cf.cjs"
   },
@@ -13,7 +15,10 @@
     "vue": "^3.5.13"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260702.1",
     "@vitejs/plugin-vue": "^5.2.1",
+    "esbuild": "^0.25.0",
+    "typescript": "~5.9.3",
     "vite": "^6.2.0",
     "wrangler": "^3.111.0"
   }

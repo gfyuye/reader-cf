@@ -1,3 +1,5 @@
+// Staged for the Cloudflare-parity runtime; not yet wired into the server binary.
+#![allow(dead_code)]
 use crate::error::error::AppError;
 use reqwest::Client;
 use serde::Deserialize;
@@ -130,7 +132,9 @@ impl R2Client {
             .header("Range", range_header)
             .send()
             .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("R2 range get network error: {}", e)))?;
+            .map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("R2 range get network error: {}", e))
+            })?;
 
         if resp.status() == reqwest::StatusCode::NOT_FOUND {
             return Ok(None);

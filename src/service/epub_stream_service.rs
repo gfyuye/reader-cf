@@ -1,3 +1,6 @@
+//
+// Staged for the Cloudflare-parity runtime; not yet wired into the server binary.
+#![allow(dead_code)]
 use crate::error::error::AppError;
 use crate::storage::db::d1::D1Client;
 use crate::storage::r2::R2Client;
@@ -99,9 +102,9 @@ impl EpubStreamService {
         let opf_path = parse_container_opf_path(&container_xml)?;
 
         // 2. Read OPF file
-        let opf_entry = entry_map
-            .get(&opf_path)
-            .ok_or_else(|| AppError::BadRequest(format!("非法 EPUB: 缺少 OPF 文件 {}", opf_path)))?;
+        let opf_entry = entry_map.get(&opf_path).ok_or_else(|| {
+            AppError::BadRequest(format!("非法 EPUB: 缺少 OPF 文件 {}", opf_path))
+        })?;
         let opf_xml = self.read_zip_entry_text(r2_key, opf_entry).await?;
 
         let opf_dir = if let Some(idx) = opf_path.rfind('/') {
@@ -200,17 +203,26 @@ impl EpubStreamService {
             .get("last_processed_index")
             .and_then(Value::as_i64)
             .unwrap_or(0) as usize;
-        let spine_raw = cp_row.get("spine_json").and_then(Value::as_str).unwrap_or("[]");
-        let title_map_raw = cp_row.get("title_map_json").and_then(Value::as_str).unwrap_or("{}");
+        let spine_raw = cp_row
+            .get("spine_json")
+            .and_then(Value::as_str)
+            .unwrap_or("[]");
+        let title_map_raw = cp_row
+            .get("title_map_json")
+            .and_then(Value::as_str)
+            .unwrap_or("{}");
 
         let spine: Vec<String> = serde_json::from_str(spine_raw).unwrap_or_default();
-        let title_map: HashMap<String, String> = serde_json::from_str(title_map_raw).unwrap_or_default();
+        let title_map: HashMap<String, String> =
+            serde_json::from_str(title_map_raw).unwrap_or_default();
         let total_count = spine.len();
 
         if last_idx >= total_count {
             // Already finished
             self.mark_book_ready(book_id, total_count as i32).await?;
-            return Ok(ChunkProcessOutcome::Completed { total_chapters: total_count });
+            return Ok(ChunkProcessOutcome::Completed {
+                total_chapters: total_count,
+            });
         }
 
         // 3. Load central directory to locate chapters
@@ -259,7 +271,8 @@ impl EpubStreamService {
                     .get_object_range(r2_key, entry.local_header_offset, 30)
                     .await?
                     .ok_or_else(|| AppError::Internal(anyhow::anyhow!("读取本地头失败")))?;
-                let data_offset = parse_local_header_data_offset(&local_header_bytes, entry.local_header_offset)?;
+                let data_offset =
+                    parse_local_header_data_offset(&local_header_bytes, entry.local_header_offset)?;
 
                 let title = title_map
                     .get(path)
@@ -293,7 +306,9 @@ impl EpubStreamService {
 
         // All chapters indexed! Mark ready
         self.mark_book_ready(book_id, total_count as i32).await?;
-        Ok(ChunkProcessOutcome::Completed { total_chapters: total_count })
+        Ok(ChunkProcessOutcome::Completed {
+            total_chapters: total_count,
+        })
     }
 
     /// Step 3: Read Phase (Zero-Parse Range Query) - User requests Chapter / Page N
@@ -318,7 +333,10 @@ impl EpubStreamService {
         let r2_key = row.get("r2_key").and_then(Value::as_str).unwrap_or("");
         let offset = row.get("byte_offset").and_then(Value::as_i64).unwrap_or(0) as u64;
         let length = row.get("byte_length").and_then(Value::as_i64).unwrap_or(0) as u64;
-        let method = row.get("compression_method").and_then(Value::as_i64).unwrap_or(0) as u16;
+        let method = row
+            .get("compression_method")
+            .and_then(Value::as_i64)
+            .unwrap_or(0) as u16;
 
         // 2. Fetch only that chapter's bytes from R2 via HTTP Range
         let payload = self
@@ -396,11 +414,14 @@ impl EpubStreamService {
 fn parse_eocd(tail: &[u8], total_file_size: u64) -> Result<(u64, u64, usize), AppError> {
     // EOCD signature is 0x06054b50 (PK\x05\x06)
     if tail.len() < 22 {
-        return Err(AppError::BadRequest("文件太小，不是有效 ZIP/EPUB".to_string()));
+        return Err(AppError::BadRequest(
+            "文件太小，不是有效 ZIP/EPUB".to_string(),
+        ));
     }
     for i in (0..=tail.len() - 22).rev() {
         if tail[i..i + 4] == [0x50, 0x4b, 0x05, 0x06] {
-            let total_entries = u16::from_le_bytes(tail[i + 10..i + 12].try_into().unwrap()) as usize;
+            let total_entries =
+                u16::from_le_bytes(tail[i + 10..i + 12].try_into().unwrap()) as usize;
             let cd_size = u32::from_le_bytes(tail[i + 12..i + 16].try_into().unwrap()) as u64;
             let cd_offset = u32::from_le_bytes(tail[i + 16..i + 20].try_into().unwrap()) as u64;
 
@@ -426,7 +447,8 @@ fn parse_central_directory(cd: &[u8]) -> Result<Vec<CentralDirectoryEntry>, AppE
         let name_len = u16::from_le_bytes(cd[pos + 28..pos + 30].try_into().unwrap()) as usize;
         let extra_len = u16::from_le_bytes(cd[pos + 30..pos + 32].try_into().unwrap()) as usize;
         let comment_len = u16::from_le_bytes(cd[pos + 32..pos + 34].try_into().unwrap()) as usize;
-        let local_hdr_offset = u32::from_le_bytes(cd[pos + 42..pos + 46].try_into().unwrap()) as u64;
+        let local_hdr_offset =
+            u32::from_le_bytes(cd[pos + 42..pos + 46].try_into().unwrap()) as u64;
 
         pos += 46;
         if pos + name_len > cd.len() {
@@ -493,13 +515,25 @@ fn parse_container_opf_path(xml: &str) -> Result<String, AppError> {
         }
         buf.clear();
     }
-    Err(AppError::BadRequest("container.xml 中未找到 rootfile 路径".to_string()))
+    Err(AppError::BadRequest(
+        "container.xml 中未找到 rootfile 路径".to_string(),
+    ))
 }
 
+// Complex return type is intentional for this parser.
+#[allow(clippy::type_complexity)]
 fn parse_opf_package(
     xml: &str,
     opf_dir: &str,
-) -> Result<(Option<String>, Option<String>, Vec<String>, HashMap<String, String>), AppError> {
+) -> Result<
+    (
+        Option<String>,
+        Option<String>,
+        Vec<String>,
+        HashMap<String, String>,
+    ),
+    AppError,
+> {
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
     let mut buf = Vec::new();
@@ -546,7 +580,11 @@ fn parse_opf_package(
                         let full_path = if opf_dir.is_empty() {
                             href
                         } else {
-                            format!("{}/{}", opf_dir.trim_end_matches('/'), href.trim_start_matches('/'))
+                            format!(
+                                "{}/{}",
+                                opf_dir.trim_end_matches('/'),
+                                href.trim_start_matches('/')
+                            )
                         };
                         manifest.insert(id, full_path);
                     }

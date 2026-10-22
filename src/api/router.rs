@@ -308,6 +308,6 @@ pub fn build_router(state: AppState) -> Router {
         .layer(DefaultBodyLimit::max(2048 * 1024 * 1024))
         .layer(TraceLayer::new_for_http())
         .layer(PropagateRequestIdLayer::x_request_id())
-        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid::default()))
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .layer(CorsLayer::very_permissive())
 }

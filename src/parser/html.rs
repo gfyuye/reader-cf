@@ -49,8 +49,7 @@ fn legado_to_css(selector: &str) -> String {
     let selector = selector.trim();
 
     // Handle special "class." prefix - multiple classes separated by space
-    if selector.starts_with("class.") {
-        let rest = &selector[6..];
+    if let Some(rest) = selector.strip_prefix("class.") {
         let classes: Vec<&str> = rest.split_whitespace().collect();
         if classes.len() > 1 {
             return format!(".{}", classes.join("."));
@@ -60,13 +59,13 @@ fn legado_to_css(selector: &str) -> String {
     }
 
     // Handle id. prefix
-    if selector.starts_with("id.") {
-        return format!("#{}", &selector[3..]);
+    if let Some(rest) = selector.strip_prefix("id.") {
+        return format!("#{}", rest);
     }
 
     // Handle tag. prefix
-    if selector.starts_with("tag.") {
-        return selector[4..].to_string();
+    if let Some(rest) = selector.strip_prefix("tag.") {
+        return rest.to_string();
     }
 
     // Already CSS selector format (index will be stripped in parse_selector_with_index)
@@ -157,10 +156,9 @@ fn parse_bracket_index_spec(selector: &str) -> Option<(&str, IndexMode, Vec<Inde
             if part.is_empty() {
                 continue;
             }
-            if let Some(item) = parse_bracket_index_item(part) {
+            {
+                let item = parse_bracket_index_item(part)?;
                 items.push(item);
-            } else {
-                return None;
             }
         }
     }
@@ -521,7 +519,9 @@ pub fn extract_text(el: &ElementRef, extractor: &str) -> Option<String> {
             }
 
             if extractor.starts_with('@') {
-                el.value().attr(&extractor[1..]).map(|v| v.to_string())
+                el.value()
+                    .attr(extractor.strip_prefix('@').unwrap_or(extractor))
+                    .map(|v| v.to_string())
             } else {
                 el.value().attr(extractor).map(|v| v.to_string())
             }

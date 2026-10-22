@@ -340,7 +340,11 @@ pub async fn upload_file(
     let file_type = q
         .file_type
         .as_deref()
-        .filter(|t| !t.is_empty() && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+        .filter(|t| {
+            !t.is_empty()
+                && t.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        })
         .unwrap_or("images");
 
     let dir = PathBuf::from(&state.config.storage_dir)
@@ -364,9 +368,19 @@ pub async fn upload_file(
             .unwrap_or("file");
         let safe_name: String = name
             .chars()
-            .map(|c| if c == '/' || c == '\\' || c == '\0' { '_' } else { c })
+            .map(|c| {
+                if c == '/' || c == '\\' || c == '\0' {
+                    '_'
+                } else {
+                    c
+                }
+            })
             .collect();
-        let safe_name = if safe_name.is_empty() { "file".to_string() } else { safe_name };
+        let safe_name = if safe_name.is_empty() {
+            "file".to_string()
+        } else {
+            safe_name
+        };
 
         let data = field
             .bytes()

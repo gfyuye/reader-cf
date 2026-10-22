@@ -25,6 +25,7 @@ pub struct AppConfig {
     #[serde(default = "default_true")]
     pub cf_kitesurf_enabled: bool,
     #[serde(default)]
+    #[allow(dead_code)]
     pub r2_bucket_name: Option<String>,
     #[serde(default)]
     pub remote_webview_api: Option<String>,

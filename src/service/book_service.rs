@@ -145,6 +145,8 @@ impl BookService {
             .insert(key, cookie.to_string());
     }
 
+    // Intended API; not yet wired into handlers.
+    #[allow(dead_code)]
     pub async fn clear_source_cookie(&self, user_ns: &str, source_url: &str) {
         let key = self.source_cookie_key(user_ns, source_url);
         self.source_cookies.write().await.remove(&key);
@@ -258,6 +260,8 @@ impl BookService {
         }
     }
 
+    // Intended API; not yet wired into handlers.
+    #[allow(dead_code)]
     async fn finish_rate(&self, source: &BookSource) {
         let mut states = self.rate_states.write().await;
         if let Some(state) = states.get_mut(&source.book_source_url) {
@@ -403,17 +407,15 @@ impl BookService {
         let spec = analyze_url(&login_url, "", 1, &source.book_source_url, source)?;
 
         let res = self.fetch_with_rate(source, spec).await?;
-        let check_result = if let Some(login_check_js) = source
+        let check_result = source
             .login_check_js
             .as_deref()
             .filter(|s| !s.trim().is_empty())
-        {
-            Some(with_js_lib(source.js_lib.as_deref(), || {
-                eval_js(login_check_js, &res.body, &res.url).unwrap_or_default()
-            }))
-        } else {
-            None
-        };
+            .map(|login_check_js| {
+                with_js_lib(source.js_lib.as_deref(), || {
+                    eval_js(login_check_js, &res.body, &res.url).unwrap_or_default()
+                })
+            });
 
         Ok(serde_json::json!({
             "success": true,
@@ -843,7 +845,7 @@ impl BookService {
         self.cache
             .remove_book(user_ns, &book_key)
             .await
-            .map_err(|e| AppError::Internal(e.into()))
+            .map_err(AppError::Internal)
     }
 
     /// Check if a specific chapter is cached
@@ -1300,7 +1302,7 @@ impl BookService {
         &self,
         user_ns: &str,
         toc_url: &str,
-        new_chapters: &Vec<BookChapter>,
+        new_chapters: &[BookChapter],
     ) -> Result<Vec<BookChapter>, AppError> {
         let mut existing = self
             .load_chapter_list_cache(user_ns, toc_url)
@@ -1699,7 +1701,7 @@ fn file_ext_from_url(url: &str) -> Option<String> {
     let url = url.split('#').next().unwrap_or(url);
     let pos = url.rfind('.')?;
     let ext = &url[pos + 1..];
-    if ext.len() > 0 && ext.len() <= 8 {
+    if !ext.is_empty() && ext.len() <= 8 {
         Some(ext.to_ascii_lowercase())
     } else {
         None
