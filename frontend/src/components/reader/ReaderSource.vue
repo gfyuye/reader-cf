@@ -3,16 +3,16 @@
     <div class="source-header">
       <div class="header-left">
         <h3>切换书源</h3>
-        <span class="source-count" v-if="preparedResults.length">{{ preparedResults.length }} 个结果</span>
+        <span v-if="preparedResults.length" class="source-count">{{ preparedResults.length }} 个结果</span>
       </div>
       <button class="close-btn" @click="store.closePanel()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
       </button>
     </div>
     
-    <div class="source-list" ref="listRef">
+    <div ref="listRef" class="source-list">
       <!-- Current Source Header -->
-      <div class="section-label" v-if="currentSource">当前书源</div>
+      <div v-if="currentSource" class="section-label">当前书源</div>
       <div v-if="currentSource" class="source-item current">
         <div class="source-name">{{ currentSource.originName || currentSource.origin }}</div>
         <div class="source-url">{{ currentSource.origin }}</div>
@@ -26,9 +26,9 @@
         <div class="book-brief-main">
           <div class="book-brief-title">{{ store.book.name }}</div>
           <div class="book-brief-meta">{{ store.book.author || '未知作者' }}</div>
-          <div class="book-brief-meta" v-if="store.currentChapter?.title">当前章节：{{ store.currentChapter.title }}</div>
-          <div class="book-brief-meta" v-if="store.book.latestChapterTitle">最新章节：{{ store.book.latestChapterTitle }}</div>
-          <div class="book-brief-intro" v-if="store.book.intro">{{ store.book.intro }}</div>
+          <div v-if="store.currentChapter?.title" class="book-brief-meta">当前章节：{{ store.currentChapter.title }}</div>
+          <div v-if="store.book.latestChapterTitle" class="book-brief-meta">最新章节：{{ store.book.latestChapterTitle }}</div>
+          <div v-if="store.book.intro" class="book-brief-intro">{{ store.book.intro }}</div>
         </div>
       </div>
 
@@ -42,8 +42,8 @@
       <div v-else-if="!preparedResults.length" class="empty">未找到其他书源</div>
       
       <div
-        v-else
         v-for="item in preparedResults"
+        v-else
         :key="item.book.bookUrl + item.book.origin"
         class="source-item"
         :class="{ selected: selectedCandidate?.book.bookUrl === item.book.bookUrl && selectedCandidate?.book.origin === item.book.origin }"
@@ -52,15 +52,15 @@
         <div class="source-main">
           <div class="source-name-row">
             <span class="source-name">{{ item.book.origin }}</span>
-            <span class="source-tag" v-if="item.book.kind">{{ item.book.kind }}</span>
+            <span v-if="item.book.kind" class="source-tag">{{ item.book.kind }}</span>
             <span v-if="item.sameLatest" class="compare-badge good">最新章节一致</span>
             <span v-else-if="item.book.lastChapter" class="compare-badge">章节不同</span>
           </div>
-          <div class="source-book-name" v-if="item.book.name">{{ item.book.name }}</div>
+          <div v-if="item.book.name" class="source-book-name">{{ item.book.name }}</div>
           <div class="source-author">{{ item.book.author }}</div>
-          <div class="source-intro" v-if="item.book.intro">{{ item.book.intro }}</div>
-          <div class="source-chapter" v-if="item.book.lastChapter">最新: {{ item.book.lastChapter }}</div>
-          <div class="source-update" v-if="item.book.updateTime">更新时间: {{ item.book.updateTime }}</div>
+          <div v-if="item.book.intro" class="source-intro">{{ item.book.intro }}</div>
+          <div v-if="item.book.lastChapter" class="source-chapter">最新: {{ item.book.lastChapter }}</div>
+          <div v-if="item.book.updateTime" class="source-update">更新时间: {{ item.book.updateTime }}</div>
           <div class="source-compare-line">
             <span v-if="item.sameName" class="compare-text">书名匹配</span>
             <span v-if="item.sameAuthor" class="compare-text">作者匹配</span>
@@ -97,7 +97,7 @@
             <div class="compare-meta">{{ candidatePreview?.author || selectedCandidate.book.author || '未知作者' }}</div>
             <div class="compare-line">书源：{{ candidatePreview?.originName || selectedCandidate.book.origin }}</div>
             <div class="compare-line">最新章节：{{ candidatePreview?.latestChapterTitle || selectedCandidate.book.lastChapter || '未知' }}</div>
-            <div class="compare-line compare-intro" v-if="candidatePreview?.intro || selectedCandidate.book.intro">{{ candidatePreview?.intro || selectedCandidate.book.intro }}</div>
+            <div v-if="candidatePreview?.intro || selectedCandidate.book.intro" class="compare-line compare-intro">{{ candidatePreview?.intro || selectedCandidate.book.intro }}</div>
           </div>
         </div>
       </div>

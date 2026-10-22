@@ -89,12 +89,12 @@
           :loading="shelfStore.loading"
           :sortable="!shelfStore.editMode && !shelfStore.loading && !shelfStore.sorting && !shelfStore.isSearchMode"
           empty-text="书架空空如也，搜索添加新书吧"
-        @click="handleBookClick"
-        @info="handleBookInfo"
-        @delete="handleDeleteBook"
-        @ai="handleBookAi"
-        @select="shelfStore.toggleSelection($event.bookUrl)"
-        @reorder="handleReorderBooks"
+          @click="handleBookClick"
+          @info="handleBookInfo"
+          @delete="handleDeleteBook"
+          @ai="handleBookAi"
+          @select="shelfStore.toggleSelection($event.bookUrl)"
+          @reorder="handleReorderBooks"
         />
       </div>
 

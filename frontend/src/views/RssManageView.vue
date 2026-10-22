@@ -116,7 +116,7 @@
             <span>分组</span>
             <input v-model.trim="formState.sourceGroup" placeholder="多个分组可用逗号分隔" />
           </label>
-          <div class="group-chip-row" v-if="groupList.length">
+          <div v-if="groupList.length" class="group-chip-row">
             <button
               v-for="group in groupList"
               :key="group"

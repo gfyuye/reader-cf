@@ -39,7 +39,7 @@
           @delete="$emit('delete', $event)"
           @ai="$emit('ai', $event)"
           @select="$emit('select', $event)"
-          @addToShelf="$emit('addToShelf', $event)"
+          @add-to-shelf="$emit('addToShelf', $event)"
         />
       </div>
     </TransitionGroup>

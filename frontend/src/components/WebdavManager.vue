@@ -11,7 +11,7 @@
               <h2>WebDAV 文件管理</h2>
               <p class="subtitle">管理云端存储与备份文件，支持直接将 TXT、EPUB、PDF 导入至书架</p>
             </div>
-            <button class="icon-btn" @click="close" aria-label="关闭">
+            <button class="icon-btn" aria-label="关闭" @click="close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 6 6 18M6 6l12 12" />
               </svg>
@@ -85,8 +85,8 @@
             <div class="file-list">
               <div v-if="loading" class="empty-state">正在加载文件列表...</div>
               <div v-else-if="entries.length === 0" class="empty-state">当前目录为空</div>
-              <div v-else v-for="entry in entries" :key="entry.path" class="file-row">
-                <label class="file-check" v-if="!entry.toParent">
+              <div v-for="entry in entries" v-else :key="entry.path" class="file-row">
+                <label v-if="!entry.toParent" class="file-check">
                   <input
                     type="checkbox"
                     :checked="selectedPaths.includes(entry.path)"

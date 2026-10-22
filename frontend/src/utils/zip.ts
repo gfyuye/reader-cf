@@ -54,7 +54,7 @@ async function decompressDeflate(data: Uint8Array): Promise<Uint8Array> {
         const decompressed2 = await new Response(stream2).arrayBuffer();
         return new Uint8Array(decompressed2);
       } catch (err: any) {
-        throw new Error("解压 Deflate 数据失败: " + (err.message || String(err)));
+        throw new Error("解压 Deflate 数据失败: " + (err.message || String(err)), { cause: err });
       }
     }
   }

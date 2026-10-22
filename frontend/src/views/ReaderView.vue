@@ -35,9 +35,9 @@
     <!-- PC Desktop Toolbars (Always shown) -->
     <ReaderSidebar
       v-if="!isMobile"
-      @goHome="goHome"
-      @scrollTop="scrollToTop"
-      @scrollBottom="scrollToBottom"
+      @go-home="goHome"
+      @scroll-top="scrollToTop"
+      @scroll-bottom="scrollToBottom"
     />
     <ReaderToolbar
       v-if="!isMobile"
@@ -57,9 +57,9 @@
     <ReaderMobileControls
       v-if="isMobile"
       :show="showControls || !!store.activePanel"
-      @goHome="goHome"
-      @scrollTop="scrollToTop"
-      @scrollBottom="scrollToBottom"
+      @go-home="goHome"
+      @scroll-top="scrollToTop"
+      @scroll-bottom="scrollToBottom"
       @prev="prevChapter"
       @next="nextChapter"
       @bookmark="toggleBookmark"
@@ -103,9 +103,9 @@
 
     <!-- Main Content Area -->
     <div
+      ref="scrollContainerRef"
       class="reader-scroll-container"
       :class="{ 'horizontal-page-mode': isHorizontalPageMode }"
-      ref="scrollContainerRef"
       @scroll="handleScroll"
       @mousedown="stopAutoScroll"
       @touchstart="handleTouchStart"
@@ -249,13 +249,13 @@
       <div
         v-if="selectionMenu.visible"
         class="selection-menu"
-        @click.stop
         :style="{
           top: selectionMenu.top + 'px',
           left: selectionMenu.left + 'px',
           background: chromeTheme.popup,
           color: chromeTheme.fontColor,
         }"
+        @click.stop
       >
         <div class="selection-menu-text">{{ selectionMenu.text }}</div>
         <div class="selection-menu-actions">
@@ -1094,7 +1094,8 @@ function restoreReadingPositionInternal(saved: SavedReadingPosition | null, fina
       const paragraph = paragraphs[Math.max(0, Math.min(paragraphs.length - 1, saved.paragraphIndex))]
       const top = paragraph.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
       const paragraphProgress = Math.max(0, Math.min(1, saved.paragraphProgress || 0))
-      targetTop = Math.max(section.offsetTop, top + paragraph.offsetHeight * paragraphProgress - anchorOffset)
+      const targetTop = Math.max(section.offsetTop, top + paragraph.offsetHeight * paragraphProgress - anchorOffset)
+      container.scrollTop = targetTop
     } else {
       const nextSection = section.nextElementSibling as HTMLElement | null
       const sectionHeight = Math.max(1, (nextSection ? nextSection.offsetTop : container.scrollHeight) - section.offsetTop)

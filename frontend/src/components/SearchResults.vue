@@ -82,7 +82,7 @@
       empty-text="未找到相关书籍"
       @click="handleBookClick"
       @info="handleBookInfo"
-      @addToShelf="handleAddToShelf"
+      @add-to-shelf="handleAddToShelf"
     />
 
     <BookDetailModal

@@ -93,7 +93,7 @@ function loadConfig(): ReadConfig {
       }
       return parsed
     }
-  } catch { /* ignore */ }
+  } catch (e) { void e; }
   return { ...defaultConfig }
 }
 
@@ -179,7 +179,7 @@ function loadSpeechConfig(): SpeechConfig {
   try {
     const saved = localStorage.getItem('reader-speechConfig')
     if (saved) return { ...defaultSpeechConfig, ...JSON.parse(saved) }
-  } catch { /* ignore */ }
+  } catch (e) { void e; }
   return { ...defaultSpeechConfig }
 }
 
@@ -437,12 +437,10 @@ export const useReaderStore = defineStore('reader', () => {
 
     const nextIndex = Math.max(0, Math.min(session.currentIndex || 0, session.chapters.length - 1))
     try {
-      const chapterContent = await fetchChapterContent(nextIndex)
-      if (chapterContent == null) return false
-      setActiveChapterState(nextIndex, chapterContent, session.chapterScrollProgress || 0)
-      markChapterAsRead(nextIndex)
+      await fetchChapterContent(nextIndex)
       return true
-    } catch {
+    } catch (e) {
+      void e
       return false
     }
   }
@@ -531,7 +529,7 @@ export const useReaderStore = defineStore('reader', () => {
   const speechProviderLabel = computed(() => speechConfig.provider === 'openai' ? 'OpenAI Speech' : '系统语音')
   const speechStopAt = ref(0)
   let speechStopTimer: number | null = null
-  let synth: SpeechSynthesis | null = typeof window !== 'undefined' ? window.speechSynthesis : null
+  const synth: SpeechSynthesis | null = typeof window !== 'undefined' ? window.speechSynthesis : null
   let currentUtterance: SpeechSynthesisUtterance | null = null
   let currentOpenAIAudio: HTMLAudioElement | null = null
   let currentOpenAIAudioUrl = ''
@@ -1318,13 +1316,24 @@ export const useReaderStore = defineStore('reader', () => {
       throw new Error('当前处于离线状态，且该章节未缓存到浏览器')
     }
 
-    let chapterContent = ''
     try {
-      chapterContent = await getBookContent({
+      const result = await getBookContent({
         chapterUrl: chapter.url,
         bookSourceUrl: book.value.origin,
         refresh: forceRefresh ? 1 : 0,
       })
+      const chapterContent = result
+
+      if (useBrowserCache) {
+        await setBrowserCachedChapter({
+          bookUrl: book.value.bookUrl,
+          chapterUrl: chapter.url,
+          chapterTitle: chapter.title,
+          content: chapterContent,
+        }).catch(() => undefined)
+      }
+
+      return chapterContent
     } catch (error) {
       if (browserCached) {
         appStore.showToast('网络请求失败，已切换到本地缓存章节', 'warning')
@@ -1332,17 +1341,6 @@ export const useReaderStore = defineStore('reader', () => {
       }
       throw error
     }
-
-    if (useBrowserCache) {
-      await setBrowserCachedChapter({
-        bookUrl: book.value.bookUrl,
-        chapterUrl: chapter.url,
-        chapterTitle: chapter.title,
-        content: chapterContent,
-      }).catch(() => undefined)
-    }
-
-    return chapterContent
   }
 
   async function loadChapter(index: number, forceRefresh = false) {
@@ -1402,7 +1400,7 @@ export const useReaderStore = defineStore('reader', () => {
       const res = await fetchChapterContent(index)
       if (!res) return
       preloadedContent.value.set(index, res)
-    } catch { /* ignore */ }
+    } catch (e) { void e; }
   }
 
   function normalizeChapterTitle(title?: string) {
@@ -1527,7 +1525,7 @@ export const useReaderStore = defineStore('reader', () => {
   async function fetchReplaceRules() {
     try {
       replaceRules.value = await getReplaceRules()
-    } catch { /* ignore */ }
+    } catch (e) { void e; }
   }
 
   /* ─── Bookmarks ─── */
@@ -1540,7 +1538,7 @@ export const useReaderStore = defineStore('reader', () => {
       } else {
         bookmarks.value = all
       }
-    } catch { /* ignore */ }
+    } catch (e) { void e; }
   }
 
   async function addBookmark(pos: number = 0, snippet: string = '') {

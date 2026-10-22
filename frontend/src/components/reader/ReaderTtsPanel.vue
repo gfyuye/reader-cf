@@ -9,7 +9,7 @@
             <span v-if="provider === 'openai'"> · {{ openaiSource === 'server' ? '后端配置' : `${openaiModel} / ${openaiVoice}` }}</span>
           </div>
         </div>
-        <button class="tts-close" @click="$emit('close')" aria-label="close tts panel">
+        <button class="tts-close" aria-label="close tts panel" @click="$emit('close')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6 6 18M6 6l12 12" />
           </svg>

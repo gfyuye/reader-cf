@@ -249,65 +249,65 @@
         </div>
 
         <template v-if="store.speechConfig.openaiSource === 'browser'">
-        <div class="setting-row setting-row-top">
-          <label>服务地址</label>
-          <input
-            class="voice-select"
-            type="url"
-            :value="store.speechConfig.openaiBaseUrl"
-            placeholder="http://localhost:8825"
-            @input="store.setOpenAISpeechBaseUrl(($event.target as HTMLInputElement).value)"
-          >
-        </div>
+          <div class="setting-row setting-row-top">
+            <label>服务地址</label>
+            <input
+              class="voice-select"
+              type="url"
+              :value="store.speechConfig.openaiBaseUrl"
+              placeholder="http://localhost:8825"
+              @input="store.setOpenAISpeechBaseUrl(($event.target as HTMLInputElement).value)"
+            >
+          </div>
 
-        <div class="setting-row setting-row-top">
-          <label>API Key</label>
-          <input
-            class="voice-select"
-            type="password"
-            :value="store.speechConfig.openaiApiKey"
-            placeholder="sk-..."
-            autocomplete="off"
-            @input="store.setOpenAISpeechApiKey(($event.target as HTMLInputElement).value)"
-          >
-        </div>
+          <div class="setting-row setting-row-top">
+            <label>API Key</label>
+            <input
+              class="voice-select"
+              type="password"
+              :value="store.speechConfig.openaiApiKey"
+              placeholder="sk-..."
+              autocomplete="off"
+              @input="store.setOpenAISpeechApiKey(($event.target as HTMLInputElement).value)"
+            >
+          </div>
 
-        <div class="setting-row setting-row-top">
-          <label>语音模型</label>
-          <input
-            class="voice-select"
-            type="text"
-            :value="store.speechConfig.openaiModel"
-            placeholder="gpt-4o-mini-tts"
-            @input="store.setOpenAISpeechModel(($event.target as HTMLInputElement).value)"
-          >
-        </div>
+          <div class="setting-row setting-row-top">
+            <label>语音模型</label>
+            <input
+              class="voice-select"
+              type="text"
+              :value="store.speechConfig.openaiModel"
+              placeholder="gpt-4o-mini-tts"
+              @input="store.setOpenAISpeechModel(($event.target as HTMLInputElement).value)"
+            >
+          </div>
 
-        <div class="setting-row setting-row-top">
-          <label>语音音色</label>
-          <input
-            class="voice-select"
-            type="text"
-            :value="store.speechConfig.openaiVoice"
-            placeholder="alloy"
-            @input="store.setOpenAISpeechVoice(($event.target as HTMLInputElement).value)"
-          >
-        </div>
+          <div class="setting-row setting-row-top">
+            <label>语音音色</label>
+            <input
+              class="voice-select"
+              type="text"
+              :value="store.speechConfig.openaiVoice"
+              placeholder="alloy"
+              @input="store.setOpenAISpeechVoice(($event.target as HTMLInputElement).value)"
+            >
+          </div>
 
-        <div class="setting-row setting-row-top">
-          <label>音频格式</label>
-          <select
-            class="voice-select"
-            :value="store.speechConfig.openaiFormat"
-            @change="store.setOpenAISpeechFormat(($event.target as HTMLSelectElement).value as 'mp3' | 'wav' | 'opus' | 'flac' | 'pcm')"
-          >
-            <option value="mp3">mp3</option>
-            <option value="wav">wav</option>
-            <option value="opus">opus</option>
-            <option value="flac">flac</option>
-            <option value="pcm">pcm</option>
-          </select>
-        </div>
+          <div class="setting-row setting-row-top">
+            <label>音频格式</label>
+            <select
+              class="voice-select"
+              :value="store.speechConfig.openaiFormat"
+              @change="store.setOpenAISpeechFormat(($event.target as HTMLSelectElement).value as 'mp3' | 'wav' | 'opus' | 'flac' | 'pcm')"
+            >
+              <option value="mp3">mp3</option>
+              <option value="wav">wav</option>
+              <option value="opus">opus</option>
+              <option value="flac">flac</option>
+              <option value="pcm">pcm</option>
+            </select>
+          </div>
         </template>
 
         <div v-else class="server-speech-note">

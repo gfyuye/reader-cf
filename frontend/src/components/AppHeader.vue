@@ -38,7 +38,7 @@
 
       <!-- Right: Actions -->
       <div class="header-right">
-        <button class="header-btn" :class="{ active: currentSection === 'home' }" @click="goHome" title="书架">
+        <button class="header-btn" :class="{ active: currentSection === 'home' }" title="书架" @click="goHome">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20" />
             <path d="M4 5.5V19a2 2 0 0 0 2 2h14" />
@@ -49,7 +49,7 @@
           <span class="btn-label">书架</span>
         </button>
 
-        <button class="header-btn" :class="{ active: currentSection === 'explore' }" @click="handleExplore" title="书海">
+        <button class="header-btn" :class="{ active: currentSection === 'explore' }" title="书海" @click="handleExplore">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10" />
             <path d="m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z" />
@@ -57,7 +57,7 @@
           <span class="btn-label">书海</span>
         </button>
 
-        <button class="header-btn" :class="{ active: currentSection === 'recent' }" @click="handleRecent" title="最近阅读">
+        <button class="header-btn" :class="{ active: currentSection === 'recent' }" title="最近阅读" @click="handleRecent">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 7v5l3 2" />
             <circle cx="12" cy="12" r="9" />
@@ -65,7 +65,7 @@
           <span class="btn-label">最近</span>
         </button>
 
-        <button class="header-btn" :class="{ active: currentSection === 'rss' }" @click="handleRss" title="RSS">
+        <button class="header-btn" :class="{ active: currentSection === 'rss' }" title="RSS" @click="handleRss">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4 11a9 9 0 0 1 9 9" />
             <path d="M4 4a16 16 0 0 1 16 16" />
@@ -74,7 +74,7 @@
           <span class="btn-label">RSS</span>
         </button>
 
-        <button class="header-btn" @click="toggleTheme" title="切换主题">
+        <button class="header-btn" title="切换主题" @click="toggleTheme">
           <svg v-if="theme === 'light'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
           </svg>
@@ -84,7 +84,7 @@
           </svg>
         </button>
 
-        <button v-if="!isLoggedIn" class="header-btn settings-btn" @click="openSettings" title="设置">
+        <button v-if="!isLoggedIn" class="header-btn settings-btn" title="设置" @click="openSettings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
             <circle cx="12" cy="12" r="3" />
@@ -95,8 +95,8 @@
         <button
           v-if="isLoggedIn"
           class="header-btn user-btn"
-          @click="openSettings"
           title="用户"
+          @click="openSettings"
         >
           <div class="user-avatar">{{ userInfo?.username?.charAt(0)?.toUpperCase() || 'U' }}</div>
         </button>

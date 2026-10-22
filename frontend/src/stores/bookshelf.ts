@@ -221,7 +221,7 @@ export const useBookshelfStore = defineStore('bookshelf', () => {
 
   async function saveGroup(groupName: string, groupId = 0) {
     if (groupId === -1 || groupId === -2 || groupId === -4 || groupId === 0) return groupId
-    let existingGroup = groups.value.find((g) => g.groupId === groupId)
+    const existingGroup = groups.value.find((g) => g.groupId === groupId)
     if (groupId <= 0) {
       const existingIds = groups.value.map((g) => g.groupId).filter((id) => id > 0)
       let nextId = 1

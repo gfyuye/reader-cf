@@ -21,15 +21,15 @@
           </button>
           
           <div class="new-group">
-             <input 
-               v-model="newGroupName" 
-               placeholder="新建分组名称..." 
-               class="group-input"
-               @keyup.enter="handleCreate"
-             />
-             <button class="add-btn" @click="handleCreate" :disabled="!newGroupName.trim()">
-               新建并移动
-             </button>
+            <input 
+              v-model="newGroupName" 
+              placeholder="新建分组名称..." 
+              class="group-input"
+              @keyup.enter="handleCreate"
+            />
+            <button class="add-btn" :disabled="!newGroupName.trim()" @click="handleCreate">
+              新建并移动
+            </button>
           </div>
         </div>
       </div>

@@ -12,8 +12,8 @@
               <p class="subtitle">管理账号、密码、备份、本地存储与后端 AI 模型权限</p>
             </div>
             <div class="header-actions">
-              <button class="mini-btn danger" @click="handleExitAdmin" title="退出管理模式">退出管理</button>
-              <button class="icon-btn" :class="{ spinning: loading }" @click="loadUsers" title="刷新">
+              <button class="mini-btn danger" title="退出管理模式" @click="handleExitAdmin">退出管理</button>
+              <button class="icon-btn" :class="{ spinning: loading }" title="刷新" @click="loadUsers">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                   <path d="M3 3v5h5" />
@@ -21,7 +21,7 @@
                   <path d="M16 16h5v5" />
                 </svg>
               </button>
-              <button class="icon-btn" @click="close" title="关闭">
+              <button class="icon-btn" title="关闭" @click="close">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M18 6 6 18M6 6l12 12" />
                 </svg>

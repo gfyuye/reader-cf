@@ -82,12 +82,12 @@
     </div>
 
     <!-- Chapters List -->
-    <div v-show="activeTab === 'chapters'" class="list-container" ref="listRef">
+    <div v-show="activeTab === 'chapters'" ref="listRef" class="list-container">
       <div v-if="store.chaptersLoading" class="loading">加载目录中...</div>
       <div v-else-if="filteredChapters.length === 0" class="empty">未找到匹配的章节</div>
       <div
-        v-else
         v-for="chapter in filteredChapters"
+        v-else
         :key="chapter.index"
         class="list-item"
         :class="{ active: chapter.index === store.currentIndex, read: store.isChapterRead(chapter.index) }"
@@ -107,8 +107,8 @@
     <div v-show="activeTab === 'bookmarks'" class="list-container">
       <div v-if="!store.bookmarks.length" class="empty">暂无书签</div>
       <div
-        v-else
         v-for="(bm, idx) in store.bookmarks"
+        v-else
         :key="idx"
         class="list-item bookmark-item"
         :class="{ selected: isBookmarkSelected(bm) }"

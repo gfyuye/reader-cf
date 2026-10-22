@@ -3,17 +3,17 @@
     <div v-if="show" class="reader-search-panel" :style="{ background: theme.popup, color: theme.fontColor }">
       <div class="reader-search-header">
         <div class="reader-search-title">章节搜索</div>
-        <button @click="$emit('close')" class="close-search">×</button>
+        <button class="close-search" @click="$emit('close')">×</button>
       </div>
       <div class="reader-search-form">
         <input
+          ref="inputRef"
           :value="query"
           placeholder="搜索当前章节内容..."
-          ref="inputRef"
           @input="$emit('update:query', ($event.target as HTMLInputElement).value)"
           @keyup.enter="$emit('search')"
         />
-        <button class="search-submit" @click="$emit('search')" :disabled="!query">
+        <button class="search-submit" :disabled="!query" @click="$emit('search')">
           搜索
         </button>
       </div>
@@ -21,8 +21,8 @@
         <span v-if="count">{{ activeIndex + 1 }} / {{ count }}</span>
         <span v-else>{{ status }}</span>
         <div class="search-actions">
-          <button @click="$emit('prev')" :disabled="!count">↑</button>
-          <button @click="$emit('next')" :disabled="!count">↓</button>
+          <button :disabled="!count" @click="$emit('prev')">↑</button>
+          <button :disabled="!count" @click="$emit('next')">↓</button>
         </div>
       </div>
       <div class="reader-search-results">

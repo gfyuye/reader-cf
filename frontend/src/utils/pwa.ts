@@ -9,12 +9,23 @@ function isLocalhostEnv() {
 }
 
 async function clearServiceWorkerCaches() {
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
-  const registrations = await navigator.serviceWorker.getRegistrations()
-  await Promise.all(registrations.map((registration) => registration.unregister()))
-  if (typeof window !== 'undefined' && 'caches' in window) {
-    const keys = await caches.keys()
-    await Promise.all(keys.map((key) => caches.delete(key)))
+  const nav: any = typeof navigator === 'undefined' ? null : navigator
+  if (!nav || !('serviceWorker' in nav)) return
+  try {
+    const registrations = await nav.serviceWorker.getRegistrations()
+    await Promise.all(registrations.map((registration: any) => registration.unregister()))
+  } catch (e) {
+    void e
+  }
+  try {
+    const g: any = (globalThis as any)
+    const c = g && g.caches
+    if (c) {
+      const keys = await c.keys()
+      await Promise.all(keys.map((key: any) => c.delete(key)))
+    }
+  } catch (e) {
+    void e
   }
 }
 

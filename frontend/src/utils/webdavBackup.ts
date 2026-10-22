@@ -177,7 +177,9 @@ export async function restoreBackupFromBytes(bytes: Uint8Array): Promise<void> {
         if (data) {
           try {
             return JSON.parse(decoder.decode(data)) as T
-          } catch {}
+          } catch (e) {
+            void e;
+          }
         }
       }
       return fallback

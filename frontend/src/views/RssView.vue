@@ -6,7 +6,7 @@
           <span v-if="store.activeSource?.sourceGroup" class="meta-chip">{{ store.activeSource.sourceGroup }}</span>
           <label class="source-select">
             <span>当前源</span>
-            <select v-model="store.activeSourceUrl" @change="handleReaderSourceChange" v-if="store.enabledSources.length">
+            <select v-if="store.enabledSources.length" v-model="store.activeSourceUrl" @change="handleReaderSourceChange">
               <option v-for="source in store.enabledSources" :key="source.sourceUrl" :value="source.sourceUrl">
                 {{ source.sourceName }}
               </option>
@@ -14,16 +14,16 @@
           </label>
         </div>
         <div class="rss-hero-actions">
-          <button class="ghost-btn icon-btn" @click="goManage" aria-label="管理订阅源" title="管理订阅源">
+          <button class="ghost-btn icon-btn" aria-label="管理订阅源" title="管理订阅源" @click="goManage">
             <span class="btn-icon">⚙</span>
             <span class="btn-text">管理订阅源</span>
           </button>
           <button
             class="ghost-btn icon-btn"
             :disabled="!store.enabledSources.length"
-            @click="store.fetchArticles(true)"
             aria-label="刷新文章"
             title="刷新文章"
+            @click="store.fetchArticles(true)"
           >
             <span class="btn-icon">↻</span>
             <span class="btn-text">刷新文章</span>
@@ -31,8 +31,8 @@
         </div>
       </div>
 
-      <div class="toolbar-middle" v-if="store.enabledSources.length">
-        <section class="rss-scope-bar" v-if="store.enabledSources.length">
+      <div v-if="store.enabledSources.length" class="toolbar-middle">
+        <section v-if="store.enabledSources.length" class="rss-scope-bar">
           <button
             class="scope-chip"
             :class="{ active: store.articleScope === 'source' }"
@@ -76,21 +76,21 @@
           <div v-else-if="!store.activeSourceUrl" class="empty-box">请选择一个 RSS 源。</div>
           <template v-else>
             <div class="article-list-stack">
-            <button
-              v-for="article in store.articles"
-              :key="`${article.variable || 'rss'}-${article.link}`"
-              class="article-item"
-              :class="{ active: store.activeArticle?.link === article.link && store.activeArticle?.variable === article.variable }"
-              @click="handleOpenArticle(article)"
-            >
-              <div class="article-title">{{ article.title || '无标题' }}</div>
-              <div class="article-meta-line">
-                <span>{{ formatRelativeTime(article.pubDate) || '暂无时间' }}</span>
-                <span v-if="article.origin" class="meta-sep">·</span>
-                <span v-if="article.origin">{{ article.origin }}</span>
-              </div>
-              <div v-if="article.description" class="article-desc">{{ toPlainPreview(article.description) }}</div>
-            </button>
+              <button
+                v-for="article in store.articles"
+                :key="`${article.variable || 'rss'}-${article.link}`"
+                class="article-item"
+                :class="{ active: store.activeArticle?.link === article.link && store.activeArticle?.variable === article.variable }"
+                @click="handleOpenArticle(article)"
+              >
+                <div class="article-title">{{ article.title || '无标题' }}</div>
+                <div class="article-meta-line">
+                  <span>{{ formatRelativeTime(article.pubDate) || '暂无时间' }}</span>
+                  <span v-if="article.origin" class="meta-sep">·</span>
+                  <span v-if="article.origin">{{ article.origin }}</span>
+                </div>
+                <div v-if="article.description" class="article-desc">{{ toPlainPreview(article.description) }}</div>
+              </button>
             </div>
             <button v-if="store.hasMore && !store.loading" class="load-more-btn" @click="store.fetchArticles()">加载更多</button>
             <div v-if="store.loading" class="empty-box loading-box">文章加载中...</div>

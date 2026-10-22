@@ -1140,7 +1140,7 @@ function parseJsonContent(content: string): AiBookRawModelUpdate {
   try {
     return JSON.parse(json) as AiBookRawModelUpdate
   } catch (error) {
-    throw new Error(`AI 资料生成结果不是有效 JSON：${(error as Error).message}`)
+    throw new Error(`AI 资料生成结果不是有效 JSON：${(error as Error).message}`, { cause: error })
   }
 }
 

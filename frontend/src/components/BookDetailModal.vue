@@ -46,7 +46,7 @@
           </div>
 
           <!-- Chapters -->
-          <div class="chapter-section" v-if="chapters.length > 0">
+          <div v-if="chapters.length > 0" class="chapter-section">
             <h3>目录 ({{ chapters.length }})</h3>
             <div class="chapter-list">
               <div

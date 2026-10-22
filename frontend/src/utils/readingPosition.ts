@@ -33,5 +33,7 @@ export function saveReadingPositionToStorage(bookUrl: string, position: SavedRea
   if (!key) return
   try {
     localStorage.setItem(key, JSON.stringify(position))
-  } catch {}
+  } catch (e) {
+    void e
+  }
 }

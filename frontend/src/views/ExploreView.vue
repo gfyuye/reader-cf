@@ -5,7 +5,7 @@
         <h2>发现书海</h2>
         <!-- 顶部：书源切换 -->
         <div class="source-selector">
-          <select :value="store.activeSourceUrl" @change="onSourceChange" v-if="store.exploreSources.length > 0">
+          <select v-if="store.exploreSources.length > 0" :value="store.activeSourceUrl" @change="onSourceChange">
             <option
               v-for="src in store.exploreSources"
               :key="src.bookSourceUrl"
@@ -39,26 +39,26 @@
       </div>
 
       <!-- 书籍列表区 -->
-      <div class="content-panel" ref="scrollContainer" @scroll="handleScroll">
-        <div class="books-grid-wrapper" v-if="store.books.length > 0">
+      <div ref="scrollContainer" class="content-panel" @scroll="handleScroll">
+        <div v-if="store.books.length > 0" class="books-grid-wrapper">
           <BookGrid
             :books="store.books"
             :is-search="true"
             empty-text="暂无数据"
             @click="handleBookClick"
-            @addToShelf="handleAddToShelf"
+            @add-to-shelf="handleAddToShelf"
           />
         </div>
         
-        <div class="loading-state" v-if="store.loading">
+        <div v-if="store.loading" class="loading-state">
           <div class="spinner"></div>加载中...
         </div>
         
-        <div class="end-state" v-else-if="!store.hasMore && store.books.length > 0">
+        <div v-else-if="!store.hasMore && store.books.length > 0" class="end-state">
           没有更多了
         </div>
 
-        <div class="error-state" v-else-if="store.error">
+        <div v-else-if="store.error" class="error-state">
           {{ store.error }}
         </div>
       </div>

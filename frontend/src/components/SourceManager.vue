@@ -104,7 +104,7 @@
               <h3>书源登录页</h3>
               <p>{{ loginPreviewUrl }}</p>
             </div>
-            <button class="icon-btn" type="button" @click="loginPreviewVisible = false" title="关闭">
+            <button class="icon-btn" type="button" title="关闭" @click="loginPreviewVisible = false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 6 6 18M6 6l12 12" />
               </svg>

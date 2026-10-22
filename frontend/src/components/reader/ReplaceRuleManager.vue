@@ -19,8 +19,8 @@
         <p>规则按“排序”从小到大依次执行</p>
       </div>
       <div
-        v-else
         v-for="rule in sortedRules"
+        v-else
         :key="rule.id"
         class="rule-item"
         :class="{ disabled: !rule.isEnabled }"
@@ -28,7 +28,7 @@
         <div class="rule-info">
           <div class="rule-name-row">
             <span class="rule-name">{{ rule.name }}</span>
-            <span class="rule-badge" v-if="rule.isRegex">正则</span>
+            <span v-if="rule.isRegex" class="rule-badge">正则</span>
           </div>
           <div class="rule-scope">{{ describeScope(rule.scope) }}</div>
           <div class="rule-pattern">匹配: {{ rule.pattern }}</div>
@@ -36,7 +36,7 @@
         </div>
         <div class="rule-ops">
           <label class="switch">
-            <input type="checkbox" v-model="rule.isEnabled" @change="toggleRule(rule)">
+            <input v-model="rule.isEnabled" type="checkbox" @change="toggleRule(rule)">
             <span class="slider"></span>
           </label>
           <button class="op-btn" @click="openEditModal(rule)">编辑</button>
@@ -74,8 +74,8 @@
             <div class="scope-preview">{{ describeScope(editingRule.scope) }}</div>
           </div>
           <div class="form-row">
-            <label><input type="checkbox" v-model="editingRule.isRegex"> 正则模式</label>
-            <label>排序: <input type="number" v-model="editingRule.order" style="width: 60px"></label>
+            <label><input v-model="editingRule.isRegex" type="checkbox"> 正则模式</label>
+            <label>排序: <input v-model="editingRule.order" type="number" style="width: 60px"></label>
           </div>
         </div>
         <div class="edit-footer">
