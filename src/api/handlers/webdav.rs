@@ -118,7 +118,14 @@ pub async fn upload_file_to_webdav(
         }
         let filename = field
             .file_name()
-            .map(|s| s.to_string())
+            .map(|s| {
+                // Sanitize: strip any directory components to prevent path traversal (CRITICAL-2)
+                std::path::Path::new(s)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("file")
+                    .to_string()
+            })
             .unwrap_or_else(|| "file".to_string());
         let data = field
             .bytes()
