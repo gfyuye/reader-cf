@@ -2076,8 +2076,10 @@ function generateSessionToken(username: string): string {
 
 function randomString(len: number): string {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const buf = new Uint8Array(len);
+  crypto.getRandomValues(buf);
   let res = "";
-  for (let i = 0; i < len; i++) res += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < len; i++) res += chars[buf[i] % chars.length];
   return res;
 }
 
