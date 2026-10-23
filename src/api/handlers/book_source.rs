@@ -5,6 +5,7 @@ use crate::model::book_source::{book_source_from_value, BookSource};
 use crate::service::book_source_service::{
     book_source_has_group, set_invalid_book_source_group, INVALID_BOOK_SOURCE_GROUP,
 };
+use crate::util::network::validate_safe_url;
 use crate::util::text::{normalize_source_url, repair_encoded_url};
 use axum::{
     body::Bytes,
@@ -445,6 +446,10 @@ pub async fn book_source_proxy(
     }
 
     let target_url = resolve_proxy_target_url(&raw_target_url, &source.book_source_url)?;
+    // SSRF 防御：禁止代理访问内网/本地/元数据服务等地址
+    validate_safe_url(&target_url)
+        .await
+        .map_err(|e| AppError::BadRequest(format!("invalid proxy target url: {}", e)))?;
     let upstream_referer = extract_upstream_referer(&headers);
     let response = forward_book_source_request(
         &state,

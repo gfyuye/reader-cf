@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use crate::error::error::{ApiResponse, AppError};
 use crate::model::rss::{RssArticle, RssSource};
+use crate::util::network::validate_safe_url;
 use crate::util::time::now_ts;
 
 #[derive(Debug, Deserialize)]
@@ -243,6 +244,11 @@ pub async fn get_rss_articles(
         .find(|s| s.source_url == source_url)
         .ok_or_else(|| AppError::BadRequest("RSS源不存在".to_string()))?;
 
+    // SSRF 防御：禁止抓取内网/本地/元数据服务等地址
+    validate_safe_url(&sort_url)
+        .await
+        .map_err(|e| AppError::BadRequest(format!("invalid RSS sort url: {}", e)))?;
+
     let res = state
         .book_service
         .http_client()
@@ -341,6 +347,11 @@ pub async fn get_rss_content(
         .into_iter()
         .find(|s| s.source_url == source_url)
         .ok_or_else(|| AppError::BadRequest("RSS源不存在".to_string()))?;
+
+    // SSRF 防御：禁止抓取内网/本地/元数据服务等地址
+    validate_safe_url(&link)
+        .await
+        .map_err(|e| AppError::BadRequest(format!("invalid RSS article link: {}", e)))?;
 
     let res = state
         .book_service
