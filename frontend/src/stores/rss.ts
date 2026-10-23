@@ -44,37 +44,79 @@ export const useRssStore = defineStore('rss', () => {
       return ''
     }
 
-    return raw
+    return sanitizeHtml(raw
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
-      .trim()
-  }
+      .trim())
+}
 
-  function normalizeFetchedContent(content?: string | null) {
-    const raw = (content || '').trim()
-    if (!raw) return ''
+function sanitizeHtml(html: string): string {
+  const root = document.createElement('div')
+  root.innerHTML = html
 
-    const lowered = raw.toLowerCase()
-    const looksLikeWholePage =
-      lowered.includes('<html') ||
-      lowered.includes('<body') ||
-      lowered.includes('<head') ||
-      lowered.includes('<form') ||
-      lowered.includes('搜索') ||
-      lowered.includes('首页') ||
-      lowered.includes('广告拦截器')
-
-    if (looksLikeWholePage) {
-      return ''
+  // Remove dangerous elements entirely
+  const dangerousTags = [
+    'script', 'iframe', 'object', 'embed', 'applet',
+    'form', 'input', 'button', 'textarea', 'select',
+    'link', 'meta', 'base', 'svg', 'math',
+  ]
+  for (const tag of dangerousTags) {
+    for (const el of root.querySelectorAll(tag)) {
+      el.remove()
     }
-
-    return raw
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
-      .trim()
   }
+
+  // Strip event handler attributes (on*) and dangerous URL schemes
+  for (const el of root.querySelectorAll('*')) {
+    const attrs = Array.from(el.attributes)
+    for (const attr of attrs) {
+      if (/^on[A-Z]/i.test(attr.name)) {
+        el.removeAttribute(attr.name)
+        continue
+      }
+      if ((attr.name === 'href' || attr.name === 'src') && attr.value) {
+        const lower = attr.value.trim().toLowerCase()
+        if (
+          lower.startsWith('javascript:') ||
+          lower.startsWith('vbscript:') ||
+          lower.startsWith('data:text/html') ||
+          lower.startsWith('data:application/javascript') ||
+          lower.startsWith('data:application/ecmascript')
+        ) {
+          el.removeAttribute(attr.name)
+        }
+      }
+    }
+  }
+
+  return root.innerHTML
+}
+
+function normalizeFetchedContent(content?: string | null) {
+  const raw = (content || '').trim()
+  if (!raw) return ''
+
+  const lowered = raw.toLowerCase()
+  const looksLikeWholePage =
+    lowered.includes('<html') ||
+    lowered.includes('<body') ||
+    lowered.includes('<head') ||
+    lowered.includes('<form') ||
+    lowered.includes('搜索') ||
+    lowered.includes('首页') ||
+    lowered.includes('广告拦截器')
+
+  if (looksLikeWholePage) {
+    return ''
+  }
+
+  return sanitizeHtml(raw
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
+    .trim())
+}
 
   function sourceGroups(source: RssSource) {
     return (source.sourceGroup || '')
