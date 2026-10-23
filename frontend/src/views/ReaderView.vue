@@ -521,7 +521,49 @@ function formatChapterHtml(rawText: string, chapterTitle?: string) {
 
   appendLocalEpubAssetAuth(wrapper)
   highlightSearchText(wrapper)
-  return wrapper.innerHTML
+  return sanitizeHtml(wrapper.innerHTML)
+}
+
+function sanitizeHtml(html: string): string {
+  const root = document.createElement('div')
+  root.innerHTML = html
+
+  // Remove dangerous elements entirely
+  const dangerousTags = [
+    'script', 'iframe', 'object', 'embed', 'applet',
+    'form', 'input', 'button', 'textarea', 'select',
+    'link', 'meta', 'base', 'svg', 'math',
+  ]
+  for (const tag of dangerousTags) {
+    for (const el of root.querySelectorAll(tag)) {
+      el.remove()
+    }
+  }
+
+  // Strip event handler attributes (on*) and dangerous URL schemes
+  for (const el of root.querySelectorAll('*')) {
+    const attrs = Array.from(el.attributes)
+    for (const attr of attrs) {
+      if (/^on[A-Z]/i.test(attr.name)) {
+        el.removeAttribute(attr.name)
+        continue
+      }
+      if ((attr.name === 'href' || attr.name === 'src') && attr.value) {
+        const lower = attr.value.trim().toLowerCase()
+        if (
+          lower.startsWith('javascript:') ||
+          lower.startsWith('vbscript:') ||
+          lower.startsWith('data:text/html') ||
+          lower.startsWith('data:application/javascript') ||
+          lower.startsWith('data:application/ecmascript')
+        ) {
+          el.removeAttribute(attr.name)
+        }
+      }
+    }
+  }
+
+  return root.innerHTML
 }
 
 function deduplicateChapterTitle(wrapper: HTMLElement, chapterTitle?: string) {
