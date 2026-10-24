@@ -1108,6 +1108,48 @@ async function decryptAes128Cbc(base64Cipher: string, keyStr: string, ivStr: str
   return new TextDecoder().decode(decryptedBuf);
 }
 
+// Derive a 16-byte encryption key from SECURE_KEY for WebDAV password encryption.
+// Returns null when SECURE_KEY is not configured (caller falls back to plaintext).
+function getWebdavEncryptionKey(env: Env): string | null {
+  const secureKey = getEnv(env, "SECURE_KEY");
+  if (!secureKey) return null;
+  return md5(secureKey).substring(0, 16);
+}
+
+// AES-128-CBC encrypt with random IV prepended to ciphertext, base64-encoded.
+async function encryptAes128Cbc(plaintext: string, keyStr: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(16));
+  const keyBytes = new TextEncoder().encode(keyStr).slice(0, 16);
+  const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-CBC" }, false, ["encrypt"]);
+  const encoded = new TextEncoder().encode(plaintext);
+  const encryptedBuf = await crypto.subtle.encrypt({ name: "AES-CBC", iv }, cryptoKey, encoded);
+  const combined = new Uint8Array(iv.length + encryptedBuf.byteLength);
+  combined.set(iv);
+  combined.set(new Uint8Array(encryptedBuf), iv.length);
+  return btoa(String.fromCharCode(...combined));
+}
+
+// Decrypt webdav password that may be either encrypted (IV||ciphertext base64) or legacy plaintext.
+// Returns null if decryption fails and the value is not usable plaintext.
+async function decryptWebdavPassword(stored: string, keyStr: string): Promise<string> {
+  // Try encrypted format first: base64 of 16-byte IV + ciphertext
+  try {
+    const combined = Uint8Array.from(atob(stored), (c) => c.charCodeAt(0));
+    if (combined.length > 16) {
+      const iv = combined.slice(0, 16);
+      const ciphertext = combined.slice(16);
+      const keyBytes = new TextEncoder().encode(keyStr).slice(0, 16);
+      const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-CBC" }, false, ["decrypt"]);
+      const decryptedBuf = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, cryptoKey, ciphertext);
+      const decrypted = new TextDecoder().decode(decryptedBuf);
+      if (decrypted.length > 0) return decrypted;
+    }
+  } catch {
+    // Fall through to plaintext
+  }
+  return stored;
+}
+
 // ==========================================
 // 5. Document Store Helpers (D1: json_documents)
 // ==========================================
@@ -2952,6 +2994,15 @@ async function handleSaveRemoteWebdav(request: Request, env: Env): Promise<Respo
     if (webdavPassword && webdavPassword !== "******") {
       passwordToSave = webdavPassword;
     }
+    // HIGH-7: Encrypt WebDAV password before storage
+    const encKey = getWebdavEncryptionKey(env);
+    if (encKey && passwordToSave) {
+      try {
+        passwordToSave = await encryptAes128Cbc(passwordToSave, encKey);
+      } catch {
+        // Best-effort encryption; store as-is if it fails
+      }
+    }
 
     await env.DB.prepare(
       `INSERT INTO user_remote_webdav (username, enabled, server_url, webdav_user, webdav_password, sync_on_change, sync_interval_mins, updated_at)
@@ -2988,6 +3039,11 @@ async function handleTestRemoteWebdav(request: Request, env: Env): Promise<Respo
         `SELECT webdav_password FROM user_remote_webdav WHERE username = ?1`
       ).bind(userNs).first<{ webdav_password: string }>();
       webdavPassword = existing?.webdav_password || "";
+    }
+    // HIGH-7: Decrypt stored WebDAV password before use
+    const encKey = getWebdavEncryptionKey(env);
+    if (encKey && webdavPassword) {
+      webdavPassword = await decryptWebdavPassword(webdavPassword, encKey);
     }
 
     if (!serverUrl || !webdavUser || !webdavPassword) {
@@ -3160,7 +3216,13 @@ async function fallbackFetchFromRemoteWebdav(
       .first<{ server_url: string; webdav_user: string; webdav_password: string; enabled: number }>();
 
     if (!config || config.enabled !== 1 || !config.server_url) return null;
-    const authHeader = `Basic ${btoa(config.webdav_user + ":" + config.webdav_password)}`;
+    // HIGH-7: Decrypt stored WebDAV password before use
+    const encKey = getWebdavEncryptionKey(env);
+    let decryptedPassword = config.webdav_password;
+    if (encKey && decryptedPassword) {
+      decryptedPassword = await decryptWebdavPassword(decryptedPassword, encKey);
+    }
+    const authHeader = `Basic ${btoa(config.webdav_user + ":" + decryptedPassword)}`;
     return await remoteWebdavGetFile(config.server_url, authHeader, relKey, range);
   } catch {
     return null;
@@ -3184,7 +3246,13 @@ async function syncUserToRemoteWebdav(env: Env, username: string): Promise<{ suc
     }
 
     const cleanBase = config.server_url.replace(/\/$/, "");
-    const authHeader = `Basic ${btoa(config.webdav_user + ":" + config.webdav_password)}`;
+    // HIGH-7: Decrypt stored WebDAV password before use
+    const encKey = getWebdavEncryptionKey(env);
+    let decryptedPassword = config.webdav_password;
+    if (encKey && decryptedPassword) {
+      decryptedPassword = await decryptWebdavPassword(decryptedPassword, encKey);
+    }
+    const authHeader = `Basic ${btoa(config.webdav_user + ":" + decryptedPassword)}`;
 
     // 1. Gather all data for this user
     const [shelf, groups, sources, rss, bookmarks, rules] = await Promise.all([
