@@ -60,24 +60,17 @@ struct RateGuard {
 
 impl Drop for RateGuard {
     fn drop(&mut self) {
-        if let Some(url) = self.source_url.take() {
-            let states = self.states.clone();
-            match states.try_write() {
-                Ok(mut guard) => {
-                    if let Some(state) = guard.get_mut(&url) {
-                        state.in_flight = false;
-                    }
+        let url = self.source_url.take();
+        let states = self.states.clone();
+        if let Some(url) = url {
+            if let Ok(mut guard) = states.try_write() {
+                if let Some(state) = guard.get_mut(&url) {
+                    state.in_flight = false;
                 }
-                Err(_) => {
-                    let states = states.clone();
-                    tokio::spawn(async move {
-                        let mut guard = states.write().await;
-                        if let Some(state) = guard.get_mut(&url) {
-                            state.in_flight = false;
-                        }
-                    });
-                }
-            };
+            }
+            // 如果无法立即获取写锁，放弃本次重置：in_flight 短期保持 true
+            // 只是轻微收紧限流，远好于在 Drop 中调用 tokio::spawn（无运行时时会 panic，
+            // unwind 中 panic 会直接 abort 进程）。
         }
     }
 }
