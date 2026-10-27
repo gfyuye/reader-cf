@@ -33,7 +33,12 @@ pub fn gen_secure_password(password: &str, salt: &str) -> String {
         &mut out,
     )
     .expect("pbkdf2 derivation failed");
-    format!("{}{}${}", PBKDF2_PREFIX, PBKDF2_ITERATIONS, STANDARD.encode(out))
+    format!(
+        "{}{}${}",
+        PBKDF2_PREFIX,
+        PBKDF2_ITERATIONS,
+        STANDARD.encode(out)
+    )
 }
 
 /// Verify a password against a stored hash, supporting both legacy

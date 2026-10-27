@@ -1,7 +1,9 @@
 use crate::app::config::AppConfig;
 use crate::error::error::AppError;
 use crate::model::user::User;
-use crate::util::crypto::{gen_encrypted_password, gen_secure_password, random_string, verify_password};
+use crate::util::crypto::{
+    gen_encrypted_password, gen_secure_password, random_string, verify_password,
+};
 use crate::util::time::now_ts;
 use serde_json::Value;
 use sqlx::{sqlite::SqliteRow, Row, SqlitePool};
