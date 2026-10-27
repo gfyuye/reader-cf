@@ -1,4 +1,5 @@
 use crate::util::hash::md5_hex;
+use crate::util::network::validate_safe_url_sync;
 use crate::util::text::{apply_regex_replace, strip_whitespace};
 use aes::Aes128;
 use base64::Engine;
@@ -24,6 +25,8 @@ static JS_HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
         .gzip(true)
         .brotli(true)
         .deflate(true)
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(10))
         .build()
         .expect("failed to build JS HTTP client")
 });
@@ -446,6 +449,9 @@ fn java_ajax(spec: &str) -> anyhow::Result<String> {
         return Ok(String::new());
     }
 
+    // HIGH-11: SSRF 防御 - 校验目标 URL
+    validate_safe_url_sync(url.trim()).map_err(|e| anyhow::anyhow!("{}", e))?;
+
     let options_json = options
         .and_then(|raw| serde_json::from_str::<JsonValue>(raw).ok())
         .unwrap_or(JsonValue::Null);
@@ -482,6 +488,9 @@ fn java_ajax(spec: &str) -> anyhow::Result<String> {
 }
 
 fn java_request_simple(method: &str, url: &str, body: Option<String>) -> anyhow::Result<String> {
+    // HIGH-11: SSRF 防御 - 校验目标 URL
+    validate_safe_url_sync(url.trim()).map_err(|e| anyhow::anyhow!("{}", e))?;
+
     let method = Method::from_bytes(method.as_bytes()).unwrap_or(Method::GET);
     let mut req = JS_HTTP_CLIENT.request(method, url.trim());
     if let Some(body) = body {

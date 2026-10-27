@@ -48,32 +48,15 @@ fn is_private_or_local_ip(ip: IpAddr) -> bool {
 
 pub async fn validate_safe_url(raw: &str) -> Result<Url, String> {
     let url = Url::parse(raw.trim()).map_err(|e| format!("无效的 URL: {}", e))?;
-    match url.scheme() {
-        "http" | "https" => {}
-        other => return Err(format!("不支持的协议: {}", other)),
-    }
-    let host = url.host().ok_or_else(|| "缺少主机名".to_string())?;
-    match host {
-        Host::Ipv4(ip) => {
-            if is_private_or_local_ipv4(ip) {
-                return Err("禁止访问内网或本地 IP 地址".to_string());
-            }
+    validate_url_parts(&url)?;
+    match url.host() {
+        Some(Host::Ipv4(ip)) if is_private_or_local_ipv4(ip) => {
+            return Err("禁止访问内网或本地 IP 地址".to_string());
         }
-        Host::Ipv6(ip) => {
-            if is_private_or_local_ipv6(ip) {
-                return Err("禁止访问内网或本地 IP 地址".to_string());
-            }
+        Some(Host::Ipv6(ip)) if is_private_or_local_ipv6(ip) => {
+            return Err("禁止访问内网或本地 IP 地址".to_string());
         }
-        Host::Domain(domain) => {
-            let lower = domain.to_lowercase();
-            if lower == "localhost"
-                || lower.ends_with(".localhost")
-                || lower.ends_with(".local")
-                || lower.ends_with(".internal")
-                || lower.ends_with(".lan")
-            {
-                return Err("禁止访问本地或内网域名".to_string());
-            }
+        Some(Host::Domain(domain)) => {
             let port = url.port_or_known_default().unwrap_or(80);
             if let Ok(addrs) = tokio::net::lookup_host(format!("{}:{}", domain, port)).await {
                 for addr in addrs {
@@ -83,8 +66,49 @@ pub async fn validate_safe_url(raw: &str) -> Result<Url, String> {
                 }
             }
         }
+        _ => {}
     }
     Ok(url)
+}
+
+/// 同步版本的 SSRF URL 校验（供 blocking HTTP 客户端使用）。
+/// 不做 DNS 解析，只校验主机名后缀和直接 IP 地址。
+pub fn validate_safe_url_sync(raw: &str) -> Result<Url, String> {
+    let url = Url::parse(raw.trim()).map_err(|e| format!("无效的 URL: {}", e))?;
+    validate_url_parts(&url)?;
+    match url.host() {
+        Some(Host::Ipv4(ip)) if is_private_or_local_ipv4(ip) => {
+            return Err("禁止访问内网或本地 IP 地址".to_string());
+        }
+        Some(Host::Ipv6(ip)) if is_private_or_local_ipv6(ip) => {
+            return Err("禁止访问内网或本地 IP 地址".to_string());
+        }
+        Some(Host::Domain(domain)) => {
+            let lower = domain.to_lowercase();
+            if lower == "localhost"
+                || lower.ends_with(".localhost")
+                || lower.ends_with(".local")
+                || lower.ends_with(".internal")
+                || lower.ends_with(".lan")
+            {
+                return Err("禁止访问本地或内网域名".to_string());
+            }
+        }
+        _ => {}
+    }
+    Ok(url)
+}
+
+/// 共享的 URL 部件校验（协议和主机名存在性）
+fn validate_url_parts(url: &Url) -> Result<(), String> {
+    match url.scheme() {
+        "http" | "https" => {}
+        other => return Err(format!("不支持的协议: {}", other)),
+    }
+    if url.host().is_none() {
+        return Err("缺少主机名".to_string());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
