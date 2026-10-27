@@ -7,6 +7,7 @@ import {
   executeLegadoJs,
 } from "./legado-engine";
 import { Env, EpubQueueMessage } from "./types";
+import { corsHeaders, jsonResponse, getAccessToken } from "./http";
 
 export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./types";
 
@@ -2075,46 +2076,6 @@ async function handlePdfToc(bookId: string, env: Env): Promise<Response> {
 // ==========================================
 // 9. Utilities: Security, CORS, Parsing
 // ==========================================
-
-function corsHeaders(): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, Range, X-User-NS, X-File-Name, X-Requested-With",
-  };
-}
-
-function jsonResponse(data: any, status: number = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      ...corsHeaders(),
-    },
-  });
-}
-
-function getAccessToken(request: Request): string | null {
-  const auth = request.headers.get("Authorization");
-  if (auth && auth.trim()) {
-    const trimmed = auth.trim();
-    if (trimmed.toLowerCase().startsWith("bearer ")) {
-      const token = trimmed.substring(7).trim();
-      if (token) return token;
-    } else {
-      return trimmed;
-    }
-  }
-  const tokenHeader = request.headers.get("token") || request.headers.get("X-Access-Token");
-  if (tokenHeader && tokenHeader.trim()) return tokenHeader.trim();
-
-  const cookie = request.headers.get("Cookie") || "";
-  const match = cookie.match(/token=([^;]+)/);
-  if (match) return decodeURIComponent(match[1]);
-
-  const url = new URL(request.url);
-  return url.searchParams.get("accessToken") || url.searchParams.get("token");
-}
 
 function isAuthorizedAdmin(request: Request, env: Env): boolean {
   const configuredKey = getEnv(env, "SECURE_KEY");
