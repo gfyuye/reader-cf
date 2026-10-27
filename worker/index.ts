@@ -6,6 +6,9 @@ import {
   parseContentWithRules,
   executeLegadoJs,
 } from "./legado-engine";
+import { Env, EpubQueueMessage } from "./types";
+
+export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./types";
 
 /**
  * Cloudflare Worker Backend for reader-rust
@@ -16,34 +19,6 @@ import {
  * - Kitesurf Browser Rendering: Dynamic JavaScript crawling with 429 cooldown & fallback
  * - Zero-parse Range streaming: EPUB, PDF (206 Partial Content), MOBI
  */
-
-export interface Env {
-  DB: D1Database;
-  BUCKET: R2Bucket;
-  EPUB_QUEUE?: any;
-  ASSETS?: any; // Cloudflare Worker Static Assets Binding
-  AI?: any; // Cloudflare Workers AI Binding
-  CF_ACCOUNT_ID?: string;
-  CF_API_TOKEN?: string;
-  CF_KITESURF_ENABLED?: string;
-  REMOTE_WEBVIEW_API?: string;
-  REMOTE_WEBVIEW_API_KEY?: string;
-  SECURE?: string;
-  SECURE_KEY?: string;
-  INVITE_CODE?: string;
-  USER_LIMIT?: string;
-  USER_BOOK_LIMIT?: string;
-  USER_LOCAL_BOOK_LIMIT?: string;
-  LOG_LEVEL?: string;
-  R2_BUCKET_NAME?: string;
-  STORAGE_BACKEND?: string;
-  DATABASE_BACKEND?: string;
-}
-
-export interface EpubQueueMessage {
-  bookId: string;
-  userNs: string;
-}
 
 /**
  * Reads variable from runtime env (Cloudflare Dashboard / Secrets) with build-time fallback from .env.example
