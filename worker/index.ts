@@ -316,9 +316,14 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
     if (!isLogin) {
       return jsonResponse({ isSuccess: false, errorMsg: "用户名已被占用" });
     }
-    const encrypted = genEncryptedPassword(password, existing.salt);
-    if (encrypted !== existing.password) {
+    if (!(await verifyPassword(password, existing.salt, existing.password))) {
       return jsonResponse({ isSuccess: false, errorMsg: "密码错误" });
+    }
+    if (!existing.password.startsWith(PBKDF2_PREFIX)) {
+      const rehashed = await genSecurePassword(password, existing.salt);
+      await env.DB.prepare(`UPDATE users SET password = ?1 WHERE username = ?2`)
+        .bind(rehashed, username)
+        .run();
     }
 
     const token = generateSessionToken(username);
@@ -364,7 +369,7 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
 
   const isAdmin: number = 0; // Registered users are never auto-admin; admin access requires SECURE_KEY verification
   const salt = randomString(8);
-  const encrypted = genEncryptedPassword(password, salt);
+  const encrypted = await genSecurePassword(password, salt);
   const now = Math.floor(Date.now() / 1000);
 
   await env.DB.prepare(
@@ -1148,6 +1153,53 @@ async function decryptWebdavPassword(stored: string, keyStr: string): Promise<st
     // Fall through to plaintext
   }
   return stored;
+}
+
+// PBKDF2-HMAC-SHA256 password hashing (matches Rust backend format)
+// Format: `$pbkdf2$<iterations>$<base64_hash>` (salt stored separately)
+const PBKDF2_ITERATIONS = 100_000;
+const PBKDF2_PREFIX = "$pbkdf2$";
+
+async function pbkdf2Hash(password: string, salt: string, iterations: number): Promise<string> {
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    { name: "PBKDF2" },
+    false,
+    ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: new TextEncoder().encode(salt),
+      iterations,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    256
+  );
+  return btoa(String.fromCharCode(...new Uint8Array(bits)));
+}
+
+// Generate a PBKDF2-HMAC-SHA256 password hash with version prefix.
+async function genSecurePassword(password: string, salt: string): Promise<string> {
+  const hash = await pbkdf2Hash(password, salt, PBKDF2_ITERATIONS);
+  return `${PBKDF2_PREFIX}${PBKDF2_ITERATIONS}$${hash}`;
+}
+
+// Verify a password against a stored hash, supporting both legacy
+// double-MD5 and PBKDF2 formats.
+async function verifyPassword(password: string, salt: string, storedHash: string): Promise<boolean> {
+  if (storedHash.startsWith(PBKDF2_PREFIX)) {
+    const parts = storedHash.split("$");
+    if (parts.length !== 4) return false;
+    const iterations = parseInt(parts[2], 10);
+    if (isNaN(iterations)) return false;
+    const hash = await pbkdf2Hash(password, salt, iterations);
+    return `${PBKDF2_PREFIX}${iterations}$${hash}` === storedHash;
+  }
+  // Legacy double-MD5
+  return genEncryptedPassword(password, salt) === storedHash;
 }
 
 // ==========================================
@@ -2701,8 +2753,7 @@ async function resolveWebdavUser(request: Request, env: Env): Promise<string | n
     .first<{ username: string; password: string; salt: string; enable_webdav: number }>();
 
   if (!user || user.enable_webdav !== 1) return null;
-  const encrypted = genEncryptedPassword(password, user.salt);
-  if (encrypted !== user.password) return null;
+  if (!(await verifyPassword(password, user.salt, user.password))) return null;
   return user.username;
 }
 
@@ -5245,13 +5296,12 @@ async function handleChangePassword(request: Request, env: Env): Promise<Respons
   const user = await env.DB.prepare(`SELECT password, salt FROM users WHERE username = ?1`).bind(userNs).first<any>();
   if (!user) return jsonResponse({ isSuccess: false, errorMsg: "用户不存在" });
 
-  const oldEncrypted = genEncryptedPassword(oldPassword, user.salt);
-  if (oldEncrypted !== user.password) {
+  if (!(await verifyPassword(oldPassword, user.salt, user.password))) {
     return jsonResponse({ isSuccess: false, errorMsg: "原密码错误" });
   }
 
   const newSalt = randomString(8);
-  const newEncrypted = genEncryptedPassword(newPassword, newSalt);
+  const newEncrypted = await genSecurePassword(newPassword, newSalt);
 
   await env.DB.prepare(`UPDATE users SET password = ?1, salt = ?2 WHERE username = ?3`)
     .bind(newEncrypted, newSalt, userNs)
@@ -5299,7 +5349,7 @@ async function handleAddUser(request: Request, env: Env): Promise<Response> {
   }
 
   const salt = randomString(8);
-  const encrypted = genEncryptedPassword(password, salt);
+  const encrypted = await genSecurePassword(password, salt);
   const now = Math.floor(Date.now() / 1000);
 
   await env.DB.prepare(
@@ -5365,7 +5415,7 @@ async function handleResetPassword(request: Request, env: Env): Promise<Response
 
   const { username, password } = await request.json<any>();
   const salt = randomString(8);
-  const encrypted = genEncryptedPassword(password, salt);
+  const encrypted = await genSecurePassword(password, salt);
 
   await env.DB.prepare(`UPDATE users SET password = ?1, salt = ?2 WHERE username = ?3`)
     .bind(encrypted, salt, username)

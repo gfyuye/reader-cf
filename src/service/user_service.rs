@@ -1,7 +1,7 @@
 use crate::app::config::AppConfig;
 use crate::error::error::AppError;
 use crate::model::user::User;
-use crate::util::crypto::{gen_encrypted_password, random_string};
+use crate::util::crypto::{gen_encrypted_password, gen_secure_password, random_string, verify_password};
 use crate::util::time::now_ts;
 use serde_json::Value;
 use sqlx::{sqlite::SqliteRow, Row, SqlitePool};
@@ -76,9 +76,13 @@ impl UserService {
             if !is_login {
                 return Err(AppError::BadRequest("用户名已被占用".to_string()));
             }
-            let encrypted = gen_encrypted_password(password, &user.salt);
-            if encrypted != user.password {
+            if !verify_password(password, &user.salt, &user.password) {
                 return Err(AppError::BadRequest("密码错误".to_string()));
+            }
+            if !user.password.starts_with("$pbkdf2$") {
+                let rehashed = gen_secure_password(password, &user.salt);
+                user.password = rehashed;
+                self.upsert_user_row(&user).await.ok();
             }
             let login_data = self.save_new_session(&mut user).await?;
             return Ok(login_data);
@@ -94,7 +98,7 @@ impl UserService {
         }
 
         let salt = random_string(8);
-        let encrypted = gen_encrypted_password(password, &salt);
+        let encrypted = gen_secure_password(password, &salt);
         let now = now_ms();
         let mut user = User {
             username: username.to_string(),
@@ -207,7 +211,7 @@ impl UserService {
             return Err(AppError::BadRequest("超过用户数上限".to_string()));
         }
         let salt = random_string(8);
-        let encrypted = gen_encrypted_password(password, &salt);
+        let encrypted = gen_secure_password(password, &salt);
         let now = now_ms();
         let user = User {
             username: username.to_string(),
@@ -238,7 +242,7 @@ impl UserService {
             .await?
             .ok_or_else(|| AppError::BadRequest("用户不存在".to_string()))?;
         let salt = random_string(8);
-        let encrypted = gen_encrypted_password(password, &salt);
+        let encrypted = gen_secure_password(password, &salt);
         user.salt = salt;
         user.password = encrypted;
         self.upsert_user_row(&user).await?;
@@ -259,13 +263,12 @@ impl UserService {
             .find_user(&username)
             .await?
             .ok_or_else(|| AppError::BadRequest("用户不存在".to_string()))?;
-        let encrypted_old = gen_encrypted_password(old_password, &user.salt);
-        if encrypted_old != user.password {
+        if !verify_password(old_password, &user.salt, &user.password) {
             return Err(AppError::BadRequest("当前密码错误".to_string()));
         }
 
         let salt = random_string(8);
-        let encrypted = gen_encrypted_password(new_password, &salt);
+        let encrypted = gen_secure_password(new_password, &salt);
         let now = now_ms();
         user.salt = salt;
         user.password = encrypted;
@@ -470,8 +473,7 @@ impl UserService {
         if !user.enable_webdav {
             return Ok(None);
         }
-        let encrypted = gen_encrypted_password(password, &user.salt);
-        if encrypted != user.password {
+        if !verify_password(password, &user.salt, &user.password) {
             return Ok(None);
         }
         Ok(Some(user))
@@ -542,7 +544,8 @@ impl UserService {
     }
 
     fn generate_session_token(&self, username: &str) -> String {
-        gen_encrypted_password(username, &format!("{}{}", now_ms(), random_string(8)))
+        let _ = username;
+        random_string(32)
     }
 
     async fn load_users(&self) -> Result<HashMap<String, User>, AppError> {
