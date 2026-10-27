@@ -94,6 +94,14 @@ impl UserService {
         if is_login {
             return Err(AppError::BadRequest("用户不存在".to_string()));
         }
+        // HIGH-9: In security mode with a configured key, registration requires it
+        if self.cfg.secure && !self.cfg.secure_key.is_empty() {
+            let provided_key =
+                code.ok_or_else(|| AppError::BadRequest("安全模式下注册需要验证密钥".to_string()))?;
+            if !self.secure_key_matches(provided_key) {
+                return Err(AppError::BadRequest("验证密钥错误".to_string()));
+            }
+        }
         self.validate_new_user(username, password, code)?;
         let user_count = self.user_count().await?;
         if user_count as u32 >= self.cfg.user_limit {
