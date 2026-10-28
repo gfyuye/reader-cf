@@ -13,6 +13,17 @@ import { randomString, isSafeRemoteUrl, fetchTextWithEncoding } from "./utils";
 import { isAuthorizedAdmin, resolveUserNs } from "./auth";
 import * as documentHandlers from "./handlers/document";
 
+// === TEMP STUBS FOR SPLIT WIP (remove after handlers migrated) ===
+const _stubHandler = (name: string) => (..._args: any[]) => jsonResponse({ isSuccess: false, errorMsg: `${name} not implemented during worker split` }, 501);
+const handleTestBookSources: any = _stubHandler("handleTestBookSources");
+const handleGetRssArticles: any = _stubHandler("handleGetRssArticles");
+const handleGetRssContent: any = _stubHandler("handleGetRssContent");
+const handleUploadFile: any = _stubHandler("handleUploadFile");
+const handleDeleteFile: any = _stubHandler("handleDeleteFile");
+const handleGetAsset: any = _stubHandler("handleGetAsset");
+// === END TEMP STUBS ===
+
+
 export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./types";
 
 /**
