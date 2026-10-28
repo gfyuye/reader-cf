@@ -143,3 +143,11 @@ async function handleResetPassword(request: Request, env: Env): Promise<Response
 
   return jsonResponse({ isSuccess: true, data: "重置密码成功" });
 }
+export {
+  handleChangePassword,
+  handleGetUserList,
+  handleAddUser,
+  handleUpdateUser,
+  handleDeleteUsers,
+  handleResetPassword,
+};

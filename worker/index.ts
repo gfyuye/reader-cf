@@ -16,17 +16,6 @@ import * as authHandlers from "./handlers/auth";
 import * as userAdminHandlers from "./handlers/user-admin";
 import * as cryptoUtils from "./crypto";
 
-// === TEMP STUBS FOR SPLIT WIP (remove after handlers migrated) ===
-const _stubHandler = (name: string) => (..._args: any[]) => jsonResponse({ isSuccess: false, errorMsg: `${name} not implemented during worker split` }, 501);
-const handleTestBookSources: any = _stubHandler("handleTestBookSources");
-const handleGetRssArticles: any = _stubHandler("handleGetRssArticles");
-const handleGetRssContent: any = _stubHandler("handleGetRssContent");
-const handleUploadFile: any = _stubHandler("handleUploadFile");
-const handleDeleteFile: any = _stubHandler("handleDeleteFile");
-const handleGetAsset: any = _stubHandler("handleGetAsset");
-// === END TEMP STUBS ===
-
-
 export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./types";
 
 /**
@@ -4363,31 +4352,6 @@ async function handleDeleteWebdavFileList(request: Request, env: Env): Promise<R
 
 
 // === TEMP STUBS FOR SPLIT WIP (remove after handlers migrated) ===
-const _stubHandler = (name: string) => (..._args: any[]) => jsonResponse({ isSuccess: false, errorMsg: `${name} not implemented during worker split` }, 501);
-const handleTestBookSources: any = _stubHandler("handleTestBookSources");
-const handleGetRssArticles: any = _stubHandler("handleGetRssArticles");
-const handleGetRssContent: any = _stubHandler("handleGetRssContent");
-const handleUploadFile: any = _stubHandler("handleUploadFile");
-const handleDeleteFile: any = _stubHandler("handleDeleteFile");
-const handleGetAsset: any = _stubHandler("handleGetAsset");
-// === END TEMP STUBS ===
-
-
-export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./types";
-
-/**
- * Cloudflare Worker Backend for reader-rust
- * Full Serverless implementation on Cloudflare Edge:
- * - D1 Database: Users, Sessions, Book Sources, Bookmarks, Replace Rules, AI Memory, EPUB/PDF/MOBI Index
- * - R2 Object Storage: EPUB, PDF, MOBI, Uploaded Assets, Book Covers
- * - Cloudflare Queues: Chunked EPUB parsing under free tier time budget
- * - Kitesurf Browser Rendering: Dynamic JavaScript crawling with 429 cooldown & fallback
- * - Zero-parse Range streaming: EPUB, PDF (206 Partial Content), MOBI
- */
-
-/**
- * Reads variable from runtime env (Cloudflare Dashboard / Secrets) with build-time fallback from .env.example
- */
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
