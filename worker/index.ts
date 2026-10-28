@@ -12,6 +12,8 @@ import { getEnv } from "./env";
 import { randomString, isSafeRemoteUrl, fetchTextWithEncoding } from "./utils";
 import { isAuthorizedAdmin, resolveUserNs } from "./auth";
 import * as documentHandlers from "./handlers/document";
+import * as authHandlers from "./handlers/auth";
+import * as cryptoUtils from "./crypto";
 
 // === TEMP STUBS FOR SPLIT WIP (remove after handlers migrated) ===
 const _stubHandler = (name: string) => (..._args: any[]) => jsonResponse({ isSuccess: false, errorMsg: `${name} not implemented during worker split` }, 501);
@@ -56,13 +58,13 @@ export default {
     try {
       // 1. User Authentication & Profile
       if (path === "/reader3/login" && request.method === "POST") {
-        return handleLogin(request, env);
+        return authHandlers.handleLogin(request, env);
       }
       if (path === "/reader3/logout" && request.method === "POST") {
-        return handleLogout(request, env);
+        return authHandlers.handleLogout(request, env);
       }
       if (path === "/reader3/getUserInfo" && request.method === "GET") {
-        return handleGetUserInfo(request, env);
+        return authHandlers.handleGetUserInfo(request, env);
       }
 
       // 2. Book Sources (书源管理 - D1)
@@ -267,193 +269,6 @@ export default {
 
 // ==========================================
 // 1. User Authentication & Sessions (D1)
-// ==========================================
-
-async function handleLogin(request: Request, env: Env): Promise<Response> {
-  const body = await request.json<any>();
-  const { username, password, isLogin, code } = body;
-
-  if (!username || !password) {
-    return jsonResponse({ isSuccess: false, errorMsg: "用户名和密码不能为空" });
-  }
-
-  const existing = await env.DB.prepare(
-    `SELECT username, password, salt, token, is_admin, enable_webdav, enable_local_store, enable_ai_model FROM users WHERE username = ?1`
-  )
-    .bind(username)
-    .first<{
-      username: string;
-      password: string;
-      salt: string;
-      token: string;
-      is_admin: number;
-      enable_webdav: number;
-      enable_local_store: number;
-      enable_ai_model: number;
-    }>();
-
-  if (existing) {
-    if (!isLogin) {
-      return jsonResponse({ isSuccess: false, errorMsg: "用户名已被占用" });
-    }
-    if (!(await verifyPassword(password, existing.salt, existing.password))) {
-      return jsonResponse({ isSuccess: false, errorMsg: "密码错误" });
-    }
-    if (!existing.password.startsWith(PBKDF2_PREFIX)) {
-      const rehashed = await genSecurePassword(password, existing.salt);
-      await env.DB.prepare(`UPDATE users SET password = ?1 WHERE username = ?2`)
-        .bind(rehashed, username)
-        .run();
-    }
-
-    const token = generateSessionToken(username);
-    const expireAt = Math.floor(Date.now() / 1000) + 30 * 86400; // 30 days
-    await env.DB.prepare(
-      `INSERT INTO user_sessions (username, token, expire_at) VALUES (?1, ?2, ?3)`
-    )
-      .bind(username, token, expireAt)
-      .run();
-
-    return jsonResponse({
-      isSuccess: true,
-      data: {
-        username,
-        accessToken: `${username}:${token}`,
-        isAdmin: existing.is_admin === 1,
-        enableWebdav: existing.enable_webdav === 1,
-        enableLocalStore: existing.enable_local_store === 1,
-        enableAiModel: existing.enable_ai_model === 1,
-      },
-    });
-  }
-
-  // Register new user
-  if (isLogin) {
-    return jsonResponse({ isSuccess: false, errorMsg: "用户不存在" });
-  }
-
-  if (password.length < 8) {
-    return jsonResponse({ isSuccess: false, errorMsg: "密码长度不能少于8位" });
-  }
-
-  const inviteCode = getEnv(env, "INVITE_CODE");
-  if (inviteCode && inviteCode !== code) {
-    return jsonResponse({ isSuccess: false, errorMsg: "邀请码无效" });
-  }
-
-  const userCount = await env.DB.prepare(`SELECT count(*) as cnt FROM users`).first<{ cnt: number }>();
-  const userLimit = parseInt(getEnv(env, "USER_LIMIT", "50"), 10);
-  if ((userCount?.cnt || 0) >= userLimit) {
-    return jsonResponse({ isSuccess: false, errorMsg: "系统注册用户数已达上限" });
-  }
-
-  const isAdmin: number = 0; // Registered users are never auto-admin; admin access requires SECURE_KEY verification
-  const salt = randomString(8);
-  const encrypted = await genSecurePassword(password, salt);
-  const now = Math.floor(Date.now() / 1000);
-
-  await env.DB.prepare(
-    `INSERT INTO users (username, password, salt, token, last_login_at, created_at, is_admin)
-     VALUES (?1, ?2, ?3, '', ?4, ?4, ?5)`
-  )
-    .bind(username, encrypted, salt, now, isAdmin)
-    .run();
-
-  const token = generateSessionToken(username);
-  const expireAt = now + 30 * 86400;
-  await env.DB.prepare(
-    `INSERT INTO user_sessions (username, token, expire_at) VALUES (?1, ?2, ?3)`
-  )
-    .bind(username, token, expireAt)
-    .run();
-
-  return jsonResponse({
-    isSuccess: true,
-    data: {
-      username,
-      accessToken: `${username}:${token}`,
-      isAdmin: isAdmin === 1,
-      enableWebdav: true,
-      enableLocalStore: true,
-      enableAiModel: true,
-    },
-  });
-}
-
-async function handleLogout(request: Request, env: Env): Promise<Response> {
-  const token = getAccessToken(request);
-  if (token && token.includes(":")) {
-    const [username, sessionToken] = token.split(":");
-    await env.DB.prepare(`DELETE FROM user_sessions WHERE username = ?1 AND token = ?2`)
-      .bind(username, sessionToken)
-      .run();
-  }
-  return jsonResponse({ isSuccess: true, data: "" });
-}
-
-async function handleGetUserInfo(request: Request, env: Env): Promise<Response> {
-  const isSecure = getEnv(env, "SECURE", "true") !== "false";
-  const userNs = await resolveUserNs(request, env);
-
-  const url = new URL(request.url);
-  const secureKey = url.searchParams.get("secureKey") || request.headers.get("X-Secure-Key");
-  const configuredKey = getEnv(env, "SECURE_KEY");
-  const secureKeyRequired = !!configuredKey;
-  const adminAuthorized = !!(configuredKey && secureKey === configuredKey);
-
-  if (!userNs) {
-    return jsonResponse({
-      isSuccess: true,
-      data: {
-        userInfo: null,
-        secure: isSecure,
-        secureKeyRequired,
-        adminAuthorized,
-      },
-    });
-  }
-
-  const user = await env.DB.prepare(
-    `SELECT username, last_login_at, created_at, is_admin, enable_webdav, enable_local_store, enable_ai_model FROM users WHERE username = ?1`
-  )
-    .bind(userNs)
-    .first<any>();
-
-  const token = getAccessToken(request) || "";
-
-  const userInfo = user
-    ? {
-        username: user.username,
-        accessToken: token,
-        lastLoginAt: user.last_login_at || 0,
-        createdAt: user.created_at || 0,
-        isAdmin: user.is_admin === 1,
-        enableWebdav: user.enable_webdav === 1,
-        enableLocalStore: user.enable_local_store === 1,
-        enableAiModel: user.enable_ai_model === 1,
-      }
-    : {
-        username: userNs,
-        accessToken: token,
-        isAdmin: adminAuthorized,
-        enableWebdav: true,
-        enableLocalStore: true,
-        enableAiModel: true,
-      };
-
-  return jsonResponse({
-    isSuccess: true,
-    data: {
-      userInfo,
-      secure: isSecure,
-      secureKeyRequired,
-      adminAuthorized: adminAuthorized || !!userInfo?.isAdmin,
-    },
-  });
-}
-
-// ==========================================
-// 2. Book Sources (D1)
 // ==========================================
 
 async function handleGetBookSources(request: Request, env: Env): Promise<Response> {
@@ -1018,7 +833,7 @@ async function handleGetBookContent(request: Request, env: Env): Promise<Respons
           if (contentVal) {
             if (contentVal.length > 50 && /^[A-Za-z0-9+/=]+$/.test(contentVal)) {
               try {
-                contentVal = await decryptAes128Cbc(contentVal, "Pxga!h*e4@T8xfOm", "E&z!EHGLd$fli*8R");
+                contentVal = await cryptoUtils.decryptAes128Cbc(contentVal, "Pxga!h*e4@T8xfOm", "E&z!EHGLd$fli*8R");
               } catch {}
             }
             return jsonResponse({ isSuccess: true, data: contentVal });
@@ -1047,115 +862,6 @@ async function handleGetBookContent(request: Request, env: Env): Promise<Respons
     return jsonResponse({ isSuccess: false, errorMsg: err.message || "读取章节正文失败" });
   }
 }
-
-async function decryptAes128Cbc(base64Cipher: string, keyStr: string, ivStr: string): Promise<string> {
-  const binaryString = atob(base64Cipher);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-
-  const keyBytes = new TextEncoder().encode(keyStr);
-  const ivBytes = new TextEncoder().encode(ivStr);
-
-  const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-CBC" }, false, ["decrypt"]);
-  const decryptedBuf = await crypto.subtle.decrypt({ name: "AES-CBC", iv: ivBytes }, cryptoKey, bytes);
-  return new TextDecoder().decode(decryptedBuf);
-}
-
-// Derive a 16-byte encryption key from SECURE_KEY for WebDAV password encryption.
-// Returns null when SECURE_KEY is not configured (caller falls back to plaintext).
-function getWebdavEncryptionKey(env: Env): string | null {
-  const secureKey = getEnv(env, "SECURE_KEY");
-  if (!secureKey) return null;
-  return md5(secureKey).substring(0, 16);
-}
-
-// AES-128-CBC encrypt with random IV prepended to ciphertext, base64-encoded.
-async function encryptAes128Cbc(plaintext: string, keyStr: string): Promise<string> {
-  const iv = crypto.getRandomValues(new Uint8Array(16));
-  const keyBytes = new TextEncoder().encode(keyStr).slice(0, 16);
-  const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-CBC" }, false, ["encrypt"]);
-  const encoded = new TextEncoder().encode(plaintext);
-  const encryptedBuf = await crypto.subtle.encrypt({ name: "AES-CBC", iv }, cryptoKey, encoded);
-  const combined = new Uint8Array(iv.length + encryptedBuf.byteLength);
-  combined.set(iv);
-  combined.set(new Uint8Array(encryptedBuf), iv.length);
-  return btoa(String.fromCharCode(...combined));
-}
-
-// Decrypt webdav password that may be either encrypted (IV||ciphertext base64) or legacy plaintext.
-// Returns null if decryption fails and the value is not usable plaintext.
-async function decryptWebdavPassword(stored: string, keyStr: string): Promise<string> {
-  // Try encrypted format first: base64 of 16-byte IV + ciphertext
-  try {
-    const combined = Uint8Array.from(atob(stored), (c) => c.charCodeAt(0));
-    if (combined.length > 16) {
-      const iv = combined.slice(0, 16);
-      const ciphertext = combined.slice(16);
-      const keyBytes = new TextEncoder().encode(keyStr).slice(0, 16);
-      const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-CBC" }, false, ["decrypt"]);
-      const decryptedBuf = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, cryptoKey, ciphertext);
-      const decrypted = new TextDecoder().decode(decryptedBuf);
-      if (decrypted.length > 0) return decrypted;
-    }
-  } catch {
-    // Fall through to plaintext
-  }
-  return stored;
-}
-
-// PBKDF2-HMAC-SHA256 password hashing (matches Rust backend format)
-// Format: `$pbkdf2$<iterations>$<base64_hash>` (salt stored separately)
-const PBKDF2_ITERATIONS = 100_000;
-const PBKDF2_PREFIX = "$pbkdf2$";
-
-async function pbkdf2Hash(password: string, salt: string, iterations: number): Promise<string> {
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(password),
-    { name: "PBKDF2" },
-    false,
-    ["deriveBits"]
-  );
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      salt: new TextEncoder().encode(salt),
-      iterations,
-      hash: "SHA-256",
-    },
-    keyMaterial,
-    256
-  );
-  return btoa(String.fromCharCode(...new Uint8Array(bits)));
-}
-
-// Generate a PBKDF2-HMAC-SHA256 password hash with version prefix.
-async function genSecurePassword(password: string, salt: string): Promise<string> {
-  const hash = await pbkdf2Hash(password, salt, PBKDF2_ITERATIONS);
-  return `${PBKDF2_PREFIX}${PBKDF2_ITERATIONS}$${hash}`;
-}
-
-// Verify a password against a stored hash, supporting both legacy
-// double-MD5 and PBKDF2 formats.
-async function verifyPassword(password: string, salt: string, storedHash: string): Promise<boolean> {
-  if (storedHash.startsWith(PBKDF2_PREFIX)) {
-    const parts = storedHash.split("$");
-    if (parts.length !== 4) return false;
-    const iterations = parseInt(parts[2], 10);
-    if (isNaN(iterations)) return false;
-    const hash = await pbkdf2Hash(password, salt, iterations);
-    return `${PBKDF2_PREFIX}${iterations}$${hash}` === storedHash;
-  }
-  // Legacy double-MD5
-  return genEncryptedPassword(password, salt) === storedHash;
-}
-
-// ==========================================
-// 5. Document Store Helpers (D1: json_documents)
-// ==========================================
 
 async function handleEpubUpload(request: Request, env: Env): Promise<Response> {
   try {
@@ -2123,7 +1829,7 @@ async function resolveWebdavUser(request: Request, env: Env): Promise<string | n
     .first<{ username: string; password: string; salt: string; enable_webdav: number }>();
 
   if (!user || user.enable_webdav !== 1) return null;
-  if (!(await verifyPassword(password, user.salt, user.password))) return null;
+  if (!(await cryptoUtils.verifyPassword(password, user.salt, user.password))) return null;
   return user.username;
 }
 
@@ -2419,7 +2125,7 @@ async function handleSaveRemoteWebdav(request: Request, env: Env): Promise<Respo
     const encKey = getWebdavEncryptionKey(env);
     if (encKey && passwordToSave) {
       try {
-        passwordToSave = await encryptAes128Cbc(passwordToSave, encKey);
+        passwordToSave = await cryptoUtils.encryptAes128Cbc(passwordToSave, encKey);
       } catch {
         // Best-effort encryption; store as-is if it fails
       }
@@ -2464,7 +2170,7 @@ async function handleTestRemoteWebdav(request: Request, env: Env): Promise<Respo
     // HIGH-7: Decrypt stored WebDAV password before use
     const encKey = getWebdavEncryptionKey(env);
     if (encKey && webdavPassword) {
-      webdavPassword = await decryptWebdavPassword(webdavPassword, encKey);
+      webdavPassword = await cryptoUtils.decryptWebdavPassword(webdavPassword, encKey);
     }
 
     if (!serverUrl || !webdavUser || !webdavPassword) {
@@ -2641,7 +2347,7 @@ async function fallbackFetchFromRemoteWebdav(
     const encKey = getWebdavEncryptionKey(env);
     let decryptedPassword = config.webdav_password;
     if (encKey && decryptedPassword) {
-      decryptedPassword = await decryptWebdavPassword(decryptedPassword, encKey);
+      decryptedPassword = await cryptoUtils.decryptWebdavPassword(decryptedPassword, encKey);
     }
     const authHeader = `Basic ${btoa(config.webdav_user + ":" + decryptedPassword)}`;
     return await remoteWebdavGetFile(config.server_url, authHeader, relKey, range);
@@ -2671,7 +2377,7 @@ async function syncUserToRemoteWebdav(env: Env, username: string): Promise<{ suc
     const encKey = getWebdavEncryptionKey(env);
     let decryptedPassword = config.webdav_password;
     if (encKey && decryptedPassword) {
-      decryptedPassword = await decryptWebdavPassword(decryptedPassword, encKey);
+      decryptedPassword = await cryptoUtils.decryptWebdavPassword(decryptedPassword, encKey);
     }
     const authHeader = `Basic ${btoa(config.webdav_user + ":" + decryptedPassword)}`;
 
@@ -4410,7 +4116,7 @@ async function parseSourceChapterList(text: string, source: any, targetUrl: stri
             try {
               let padTitle = title.replace(/-/g, "+").replace(/_/g, "/");
               while (padTitle.length % 4 !== 0) padTitle += "=";
-              title = await decryptAes128Cbc(padTitle, "Pxga!h*e4@T8xfOm", "E&z!EHGLd$fli*8R");
+              title = await cryptoUtils.decryptAes128Cbc(padTitle, "Pxga!h*e4@T8xfOm", "E&z!EHGLd$fli*8R");
             } catch {}
           }
 
@@ -4666,12 +4372,12 @@ async function handleChangePassword(request: Request, env: Env): Promise<Respons
   const user = await env.DB.prepare(`SELECT password, salt FROM users WHERE username = ?1`).bind(userNs).first<any>();
   if (!user) return jsonResponse({ isSuccess: false, errorMsg: "用户不存在" });
 
-  if (!(await verifyPassword(oldPassword, user.salt, user.password))) {
+  if (!(await cryptoUtils.verifyPassword(oldPassword, user.salt, user.password))) {
     return jsonResponse({ isSuccess: false, errorMsg: "原密码错误" });
   }
 
   const newSalt = randomString(8);
-  const newEncrypted = await genSecurePassword(newPassword, newSalt);
+  const newEncrypted = await cryptoUtils.genSecurePassword(newPassword, newSalt);
 
   await env.DB.prepare(`UPDATE users SET password = ?1, salt = ?2 WHERE username = ?3`)
     .bind(newEncrypted, newSalt, userNs)
@@ -4719,7 +4425,7 @@ async function handleAddUser(request: Request, env: Env): Promise<Response> {
   }
 
   const salt = randomString(8);
-  const encrypted = await genSecurePassword(password, salt);
+  const encrypted = await cryptoUtils.genSecurePassword(password, salt);
   const now = Math.floor(Date.now() / 1000);
 
   await env.DB.prepare(
@@ -4785,7 +4491,7 @@ async function handleResetPassword(request: Request, env: Env): Promise<Response
 
   const { username, password } = await request.json<any>();
   const salt = randomString(8);
-  const encrypted = await genSecurePassword(password, salt);
+  const encrypted = await cryptoUtils.genSecurePassword(password, salt);
 
   await env.DB.prepare(`UPDATE users SET password = ?1, salt = ?2 WHERE username = ?3`)
     .bind(encrypted, salt, username)
