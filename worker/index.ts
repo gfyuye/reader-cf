@@ -32,6 +32,18 @@ export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./type
  * Reads variable from runtime env (Cloudflare Dashboard / Secrets) with build-time fallback from .env.example
  */
 
+
+// === TEMP STUBS FOR SPLIT WIP (remove after handlers migrated) ===
+const _stubHandler = (name: string) => (..._args: any[]) => jsonResponse({ isSuccess: false, errorMsg: `${name} not implemented during worker split` }, 501);
+const handleTestBookSources: any = _stubHandler("handleTestBookSources");
+const handleGetRssArticles: any = _stubHandler("handleGetRssArticles");
+const handleGetRssContent: any = _stubHandler("handleGetRssContent");
+const handleUploadFile: any = _stubHandler("handleUploadFile");
+const handleDeleteFile: any = _stubHandler("handleDeleteFile");
+const handleGetAsset: any = _stubHandler("handleGetAsset");
+// === END TEMP STUBS ===
+
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // 0. Handle CORS Preflight
@@ -2112,7 +2124,7 @@ async function handleSaveRemoteWebdav(request: Request, env: Env): Promise<Respo
       passwordToSave = webdavPassword;
     }
     // HIGH-7: Encrypt WebDAV password before storage
-    const encKey = getWebdavEncryptionKey(env);
+    const encKey = getEnv(env, "SECURE_KEY") ? getEnv(env, "SECURE_KEY").substring(0,16).padEnd(16,"0") : null;
     if (encKey && passwordToSave) {
       try {
         passwordToSave = await cryptoUtils.encryptAes128Cbc(passwordToSave, encKey);
@@ -2158,7 +2170,7 @@ async function handleTestRemoteWebdav(request: Request, env: Env): Promise<Respo
       webdavPassword = existing?.webdav_password || "";
     }
     // HIGH-7: Decrypt stored WebDAV password before use
-    const encKey = getWebdavEncryptionKey(env);
+    const encKey = getEnv(env, "SECURE_KEY") ? getEnv(env, "SECURE_KEY").substring(0,16).padEnd(16,"0") : null;
     if (encKey && webdavPassword) {
       webdavPassword = await cryptoUtils.decryptWebdavPassword(webdavPassword, encKey);
     }
@@ -2334,7 +2346,7 @@ async function fallbackFetchFromRemoteWebdav(
 
     if (!config || config.enabled !== 1 || !config.server_url) return null;
     // HIGH-7: Decrypt stored WebDAV password before use
-    const encKey = getWebdavEncryptionKey(env);
+    const encKey = getEnv(env, "SECURE_KEY") ? getEnv(env, "SECURE_KEY").substring(0,16).padEnd(16,"0") : null;
     let decryptedPassword = config.webdav_password;
     if (encKey && decryptedPassword) {
       decryptedPassword = await cryptoUtils.decryptWebdavPassword(decryptedPassword, encKey);
@@ -2364,7 +2376,7 @@ async function syncUserToRemoteWebdav(env: Env, username: string): Promise<{ suc
 
     const cleanBase = config.server_url.replace(/\/$/, "");
     // HIGH-7: Decrypt stored WebDAV password before use
-    const encKey = getWebdavEncryptionKey(env);
+    const encKey = getEnv(env, "SECURE_KEY") ? getEnv(env, "SECURE_KEY").substring(0,16).padEnd(16,"0") : null;
     let decryptedPassword = config.webdav_password;
     if (encKey && decryptedPassword) {
       decryptedPassword = await cryptoUtils.decryptWebdavPassword(decryptedPassword, encKey);
