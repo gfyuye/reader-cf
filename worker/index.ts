@@ -11,6 +11,7 @@ import { corsHeaders, jsonResponse, getAccessToken } from "./http";
 import { getEnv } from "./env";
 import { randomString, isSafeRemoteUrl, fetchTextWithEncoding } from "./utils";
 import { isAuthorizedAdmin, resolveUserNs } from "./auth";
+import * as documentHandlers from "./handlers/document";
 
 export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./types";
 
@@ -128,24 +129,24 @@ export default {
       }
 
       // 5. Document Management: Bookmarks, ReplaceRules, BookGroups
-      if (path === "/reader3/getBookmarks") return handleGetDocument(request, env, "bookmark.json");
-      if (path === "/reader3/saveBookmark" && request.method === "POST") return handleSaveDocumentItem(request, env, "bookmark.json", ctx);
-      if (path === "/reader3/deleteBookmark" && request.method === "POST") return handleDeleteDocumentItem(request, env, "bookmark.json", ctx);
+      if (path === "/reader3/getBookmarks") return documentHandlers.handleGetDocument(request, env, "bookmark.json");
+      if (path === "/reader3/saveBookmark" && request.method === "POST") return documentHandlers.handleSaveDocumentItem(request, env, "bookmark.json", ctx);
+      if (path === "/reader3/deleteBookmark" && request.method === "POST") return documentHandlers.handleDeleteDocumentItem(request, env, "bookmark.json", ctx);
 
-      if (path === "/reader3/getReplaceRules") return handleGetDocument(request, env, "replaceRule.json");
-      if (path === "/reader3/saveReplaceRule" && request.method === "POST") return handleSaveDocumentItem(request, env, "replaceRule.json", ctx);
-      if (path === "/reader3/deleteReplaceRule" && request.method === "POST") return handleDeleteDocumentItem(request, env, "replaceRule.json", ctx);
+      if (path === "/reader3/getReplaceRules") return documentHandlers.handleGetDocument(request, env, "replaceRule.json");
+      if (path === "/reader3/saveReplaceRule" && request.method === "POST") return documentHandlers.handleSaveDocumentItem(request, env, "replaceRule.json", ctx);
+      if (path === "/reader3/deleteReplaceRule" && request.method === "POST") return documentHandlers.handleDeleteDocumentItem(request, env, "replaceRule.json", ctx);
 
-      if (path === "/reader3/getBookGroups") return handleGetDocument(request, env, "bookGroup.json");
-      if (path === "/reader3/saveBookGroup" && request.method === "POST") return handleSaveDocumentItem(request, env, "bookGroup.json", ctx);
-      if (path === "/reader3/deleteBookGroup" && request.method === "POST") return handleDeleteDocumentItem(request, env, "bookGroup.json", ctx);
+      if (path === "/reader3/getBookGroups") return documentHandlers.handleGetDocument(request, env, "bookGroup.json");
+      if (path === "/reader3/saveBookGroup" && request.method === "POST") return documentHandlers.handleSaveDocumentItem(request, env, "bookGroup.json", ctx);
+      if (path === "/reader3/deleteBookGroup" && request.method === "POST") return documentHandlers.handleDeleteDocumentItem(request, env, "bookGroup.json", ctx);
 
       // RSS Sources & Articles
-      if (path === "/reader3/getRssSources") return handleGetDocument(request, env, "rssSource.json");
-      if (path === "/reader3/saveRssSource" && request.method === "POST") return handleSaveDocumentItem(request, env, "rssSource.json", ctx);
-      if (path === "/reader3/saveRssSources" && request.method === "POST") return handleSaveDocumentItems(request, env, "rssSource.json", ctx);
-      if (path === "/reader3/deleteRssSource" && request.method === "POST") return handleDeleteDocumentItem(request, env, "rssSource.json", ctx);
-      if (path === "/reader3/deleteRssSources" && request.method === "POST") return handleDeleteDocumentItems(request, env, "rssSource.json", ctx);
+      if (path === "/reader3/getRssSources") return documentHandlers.handleGetDocument(request, env, "rssSource.json");
+      if (path === "/reader3/saveRssSource" && request.method === "POST") return documentHandlers.handleSaveDocumentItem(request, env, "rssSource.json", ctx);
+      if (path === "/reader3/saveRssSources" && request.method === "POST") return documentHandlers.handleSaveDocumentItems(request, env, "rssSource.json", ctx);
+      if (path === "/reader3/deleteRssSource" && request.method === "POST") return documentHandlers.handleDeleteDocumentItem(request, env, "rssSource.json", ctx);
+      if (path === "/reader3/deleteRssSources" && request.method === "POST") return documentHandlers.handleDeleteDocumentItems(request, env, "rssSource.json", ctx);
       if (path === "/reader3/getRssArticles") return handleGetRssArticles(request, env);
       if (path === "/reader3/getRssContent") return handleGetRssContent(request, env);
 
@@ -231,8 +232,8 @@ export default {
       if (path === "/reader3/getAiBookMemory") return handleGetAiBookMemory(request, env);
       if (path === "/reader3/saveAiBookMemory" && request.method === "POST") return handleSaveAiBookMemory(request, env);
       if (path === "/reader3/deleteAiBookMemory" && request.method === "POST") return handleDeleteAiBookMemory(request, env);
-      if (path === "/reader3/getAiModelConfig") return handleGetDocument(request, env, "ai-model-config.json");
-      if (path === "/reader3/saveAiModelConfig" && request.method === "POST") return handleSaveDocumentItem(request, env, "ai-model-config.json", ctx);
+      if (path === "/reader3/getAiModelConfig") return documentHandlers.handleGetDocument(request, env, "ai-model-config.json");
+      if (path === "/reader3/saveAiModelConfig" && request.method === "POST") return documentHandlers.handleSaveDocumentItem(request, env, "ai-model-config.json", ctx);
       if (path === "/reader3/aiProxy" && request.method === "POST") return handleAiProxy(request, env);
       if (path === "/reader3/aiProxyImage" && request.method === "POST") return handleAiProxyImage(request, env);
 
@@ -614,7 +615,7 @@ async function handleGetBookshelf(request: Request, env: Env): Promise<Response>
   const userNs = await resolveUserNs(request, env);
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
-  const shelfDoc = await getDocument(env, userNs, "bookshelf.json");
+  const shelfDoc = await documentHandlers.getDocument(env, userNs, "bookshelf.json");
   return jsonResponse({ isSuccess: true, data: shelfDoc || [] });
 }
 
@@ -623,7 +624,7 @@ async function handleSaveBook(request: Request, env: Env, ctx: ExecutionContext)
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
   const book = await request.json<any>();
-  let shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
 
   const idx = shelf.findIndex((b) => b.bookUrl === book.bookUrl);
   if (idx >= 0) {
@@ -632,7 +633,7 @@ async function handleSaveBook(request: Request, env: Env, ctx: ExecutionContext)
     shelf.unshift(book);
   }
 
-  await saveDocument(env, userNs, "bookshelf.json", shelf);
+  await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
   triggerOnChangeSync(env, userNs, ctx);
   return jsonResponse({ isSuccess: true, data: book });
 }
@@ -642,7 +643,7 @@ async function handleSaveBooks(request: Request, env: Env, ctx: ExecutionContext
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
   const newBooks = await request.json<any[]>();
-  let shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
 
   for (const book of newBooks) {
     const idx = shelf.findIndex((b) => b.bookUrl === book.bookUrl);
@@ -653,7 +654,7 @@ async function handleSaveBooks(request: Request, env: Env, ctx: ExecutionContext
     }
   }
 
-  await saveDocument(env, userNs, "bookshelf.json", shelf);
+  await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
   triggerOnChangeSync(env, userNs, ctx);
   return jsonResponse({ isSuccess: true, data: "书架更新成功" });
 }
@@ -667,14 +668,14 @@ async function handleDeleteBook(request: Request, env: Env, ctx: ExecutionContex
     const bookUrl = body.bookUrl || body.url || "";
     const name = body.name || "";
 
-    let shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+    let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
     shelf = shelf.filter((b) => {
       if (bookUrl && (b.bookUrl === bookUrl || b.url === bookUrl)) return false;
       if (!bookUrl && name && b.name === name) return false;
       return true;
     });
 
-    await saveDocument(env, userNs, "bookshelf.json", shelf);
+    await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
 
     if (bookUrl.startsWith("local-epub:")) {
       const bookId = bookUrl.split(":")[1]?.split("#")[0];
@@ -717,10 +718,10 @@ async function handleDeleteBooks(request: Request, env: Env, ctx: ExecutionConte
 
     const list = await request.json<any[]>().catch(() => []);
     const deleteUrls = new Set(list.map((b) => (typeof b === "string" ? b : b.bookUrl || b.url)));
-    let shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+    let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
     shelf = shelf.filter((b) => !deleteUrls.has(b.bookUrl) && !deleteUrls.has(b.url));
 
-    await saveDocument(env, userNs, "bookshelf.json", shelf);
+    await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
     triggerOnChangeSync(env, userNs, ctx);
     return jsonResponse({ isSuccess: true, data: "批量删除成功" });
   } catch (err: any) {
@@ -734,7 +735,7 @@ async function handleSaveBookProgress(request: Request, env: Env, ctx: Execution
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
   const progress = await request.json<any>();
-  let shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
 
   const targetUrl = progress.bookUrl || progress.url;
   const idx = shelf.findIndex((b) => b.bookUrl === targetUrl);
@@ -750,7 +751,7 @@ async function handleSaveBookProgress(request: Request, env: Env, ctx: Execution
       durChapterPos: durChapterPos !== undefined ? durChapterPos : shelf[idx].durChapterPos,
       durChapterTime,
     };
-    await saveDocument(env, userNs, "bookshelf.json", shelf);
+    await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
     triggerOnChangeSync(env, userNs, ctx);
   }
 
@@ -1145,460 +1146,6 @@ async function verifyPassword(password: string, salt: string, storedHash: string
 // 5. Document Store Helpers (D1: json_documents)
 // ==========================================
 
-async function getDocument(env: Env, namespace: string, name: string): Promise<any | null> {
-  const row = await env.DB.prepare(
-    `SELECT json FROM json_documents WHERE namespace = ?1 AND name = ?2`
-  )
-    .bind(namespace, name)
-    .first<{ json: string }>();
-
-  if (!row) return null;
-  try {
-    return JSON.parse(row.json);
-  } catch {
-    return null;
-  }
-}
-
-async function saveDocument(env: Env, namespace: string, name: string, data: any): Promise<void> {
-  const jsonStr = JSON.stringify(data);
-  const existing = await env.DB.prepare(
-    `SELECT json FROM json_documents WHERE namespace = ?1 AND name = ?2`
-  ).bind(namespace, name).first<{ json: string }>();
-
-  if (existing && existing.json === jsonStr) {
-    return;
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  await env.DB.prepare(
-    `INSERT INTO json_documents (namespace, name, json, updated_at)
-     VALUES (?1, ?2, ?3, ?4)
-     ON CONFLICT(namespace, name) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at`
-  )
-    .bind(namespace, name, jsonStr, now)
-    .run();
-}
-
-async function handleGetDocument(request: Request, env: Env, name: string): Promise<Response> {
-  const userNs = await resolveUserNs(request, env);
-  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-  const doc = await getDocument(env, userNs, name);
-  return jsonResponse({ isSuccess: true, data: doc || [] });
-}
-
-async function handleSaveDocumentItem(request: Request, env: Env, name: string, ctx: ExecutionContext): Promise<Response> {
-  const userNs = await resolveUserNs(request, env);
-  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-
-  const item = await request.json<any>();
-  let list: any[] = (await getDocument(env, userNs, name)) || [];
-
-  if (name === "bookGroup.json") {
-    const existingIds = list.map((g: any) => Number(g.groupId || 0)).filter((id: number) => id > 0);
-    if (!item.groupId || item.groupId <= 0) {
-      let nextId = 1;
-      while (existingIds.includes(nextId)) {
-        nextId = nextId < (1 << 30) ? nextId * 2 : nextId + 1;
-      }
-      item.groupId = nextId;
-    }
-    const idx = list.findIndex((g: any) => g.groupId === item.groupId);
-    if (idx >= 0) {
-      list[idx] = { ...list[idx], ...item };
-    } else {
-      list.push(item);
-    }
-    await saveDocument(env, userNs, name, list);
-    triggerOnChangeSync(env, userNs, ctx);
-    return jsonResponse({ isSuccess: true, data: item });
-  }
-
-  const idKey = item.id !== undefined ? "id" : item.key !== undefined ? "key" : item.url !== undefined ? "url" : null;
-  if (idKey) {
-    const idx = list.findIndex((i: any) => i[idKey] === item[idKey]);
-    if (idx >= 0) {
-      list[idx] = { ...list[idx], ...item };
-    } else {
-      list.unshift(item);
-    }
-  } else {
-    list.unshift(item);
-  }
-
-  await saveDocument(env, userNs, name, list);
-  triggerOnChangeSync(env, userNs, ctx);
-  return jsonResponse({ isSuccess: true, data: "保存成功" });
-}
-
-async function handleDeleteDocumentItem(request: Request, env: Env, name: string, ctx: ExecutionContext): Promise<Response> {
-  const userNs = await resolveUserNs(request, env);
-  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-
-  const item = await request.json<any>();
-  let list: any[] = (await getDocument(env, userNs, name)) || [];
-
-  if (name === "bookGroup.json") {
-    const targetId = item.groupId ?? item.id;
-    list = list.filter((g: any) => g.groupId !== targetId && g.id !== targetId);
-    await saveDocument(env, userNs, name, list);
-    triggerOnChangeSync(env, userNs, ctx);
-    return jsonResponse({ isSuccess: true, data: "删除成功" });
-  }
-
-  list = list.filter((i) => JSON.stringify(i) !== JSON.stringify(item));
-  await saveDocument(env, userNs, name, list);
-  triggerOnChangeSync(env, userNs, ctx);
-  return jsonResponse({ isSuccess: true, data: "删除成功" });
-}
-
-async function handleSaveDocumentItems(request: Request, env: Env, name: string, ctx: ExecutionContext): Promise<Response> {
-  const userNs = await resolveUserNs(request, env);
-  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-
-  const items = await request.json<any[]>();
-  if (!Array.isArray(items)) return jsonResponse({ isSuccess: false, errorMsg: "数据格式错误" });
-
-  let list: any[] = (await getDocument(env, userNs, name)) || [];
-
-  for (const item of items) {
-    const idKey = item.sourceUrl !== undefined ? "sourceUrl" : item.id !== undefined ? "id" : item.key !== undefined ? "key" : item.url !== undefined ? "url" : null;
-    if (idKey) {
-      const idx = list.findIndex((i: any) => i[idKey] === item[idKey]);
-      if (idx >= 0) {
-        list[idx] = { ...list[idx], ...item };
-      } else {
-        list.push(item);
-      }
-    } else {
-      list.push(item);
-    }
-  }
-
-  await saveDocument(env, userNs, name, list);
-  triggerOnChangeSync(env, userNs, ctx);
-  return jsonResponse({ isSuccess: true, data: `成功保存 ${items.length} 条记录` });
-}
-
-async function handleDeleteDocumentItems(request: Request, env: Env, name: string, ctx: ExecutionContext): Promise<Response> {
-  const userNs = await resolveUserNs(request, env);
-  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-
-  const items = await request.json<any[]>();
-  let list: any[] = (await getDocument(env, userNs, name)) || [];
-
-  if (Array.isArray(items)) {
-    const toDeleteKeys = new Set(items.map((i: any) => i.sourceUrl || i.id || i.key || JSON.stringify(i)));
-    list = list.filter((i: any) => !toDeleteKeys.has(i.sourceUrl || i.id || i.key || JSON.stringify(i)));
-  }
-
-  await saveDocument(env, userNs, name, list);
-  triggerOnChangeSync(env, userNs, ctx);
-  return jsonResponse({ isSuccess: true, data: "删除成功" });
-}
-
-async function handleGetRssArticles(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  let sourceUrl = url.searchParams.get("sourceUrl") || "";
-  let page = parseInt(url.searchParams.get("page") || "1", 10);
-
-  if (request.method === "POST") {
-    try {
-      const body = await request.json<any>();
-      sourceUrl = body.sourceUrl || body.sortUrl || sourceUrl;
-      if (body.page) page = parseInt(body.page, 10);
-    } catch {}
-  }
-
-  if (!sourceUrl) return jsonResponse({ isSuccess: false, errorMsg: "缺少 sourceUrl" });
-
-  if (!isSafeRemoteUrl(sourceUrl)) {
-    return jsonResponse({ isSuccess: false, errorMsg: "禁止访问内网或本地地址" });
-  }
-
-  try {
-    const resp = await fetch(sourceUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-      signal: AbortSignal.timeout(10000),
-    });
-    const xml = await resp.text();
-
-    const articles: any[] = [];
-    const itemRegex = /<(?:item|entry)[\s>]([\s\S]*?)<\/(?:item|entry)>/gi;
-    let match;
-    while ((match = itemRegex.exec(xml)) !== null) {
-      const itemXml = match[1];
-      const titleMatch = itemXml.match(/<title[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
-      const linkMatch = itemXml.match(/<link[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i) || itemXml.match(/<link[^>]*href=["']([^"']+)["']/i);
-      const pubDateMatch = itemXml.match(/<(?:pubDate|updated|published)[^>]*>([\s\S]*?)<\/(?:pubDate|updated|published)>/i);
-
-      const title = (titleMatch?.[1] || titleMatch?.[2] || "无标题").trim();
-      const link = (linkMatch?.[1] || linkMatch?.[2] || linkMatch?.[0] || "").trim();
-      const pubDate = pubDateMatch?.[1]?.trim() || "";
-
-      if (title || link) {
-        articles.push({
-          title,
-          link,
-          pubDate,
-          origin: sourceUrl,
-        });
-      }
-    }
-
-    return jsonResponse({
-      isSuccess: true,
-      data: {
-        first: articles,
-        second: null,
-      },
-    });
-  } catch (err: any) {
-    return jsonResponse({ isSuccess: false, errorMsg: err.message || "获取 RSS 文章失败" });
-  }
-}
-
-async function handleGetRssContent(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  let link = url.searchParams.get("url") || url.searchParams.get("link") || "";
-
-  if (request.method === "POST") {
-    try {
-      const body = await request.json<any>();
-      link = body.link || body.url || link;
-    } catch {}
-  }
-
-  if (!link) return jsonResponse({ isSuccess: false, errorMsg: "缺少 url" });
-
-  if (!isSafeRemoteUrl(link)) {
-    return jsonResponse({ isSuccess: false, errorMsg: "禁止访问内网或本地地址" });
-  }
-
-  try {
-    const resp = await fetch(link, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-      signal: AbortSignal.timeout(10000),
-    });
-    const html = await resp.text();
-    return jsonResponse({ isSuccess: true, data: html });
-  } catch (err: any) {
-    return jsonResponse({ isSuccess: false, errorMsg: err.message || "获取内容失败" });
-  }
-}
-
-async function handleTestBookSources(request: Request, env: Env): Promise<Response> {
-  const userNs = await resolveUserNs(request, env);
-  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-
-  const body = await request.json<any>().catch(() => ({}));
-  const urls: string[] = body.bookSourceUrls || [];
-  const keyword = body.keyword || "我的";
-
-  const rows = await env.DB.prepare(
-    `SELECT book_source_url, book_source_name, json FROM book_sources WHERE user_ns = ?1`
-  ).bind(userNs).all<{ book_source_url: string; book_source_name: string; json: string }>();
-
-  let allSources = (rows.results || []).map((r) => {
-    try {
-      return { ...JSON.parse(r.json), bookSourceUrl: r.book_source_url, bookSourceName: r.book_source_name };
-    } catch {
-      return { bookSourceUrl: r.book_source_url, bookSourceName: r.book_source_name };
-    }
-  });
-
-  if (urls.length > 0) {
-    allSources = allSources.filter((s) => urls.includes(s.bookSourceUrl));
-  }
-
-  const toTest = allSources.slice(0, 10);
-  const startTime = Date.now();
-  const results = [];
-
-  for (const s of toTest) {
-    const t0 = Date.now();
-    try {
-      if (s.searchUrl) {
-        let testUrl = s.searchUrl;
-        if (testUrl.includes("{{key}}")) testUrl = testUrl.replace(/\{\{key\}\}/g, encodeURIComponent(keyword));
-        else if (testUrl.includes("${key}")) testUrl = testUrl.replace(/\$\{key\}/g, encodeURIComponent(keyword));
-        else testUrl = testUrl.split("@")[0].split(";")[0].split(",")[0];
-
-        if (testUrl.startsWith("http")) {
-          if (!isSafeRemoteUrl(testUrl)) continue;
-          const resp = await fetch(testUrl, {
-            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-            signal: AbortSignal.timeout(5000),
-          });
-          results.push({
-            bookSourceUrl: s.bookSourceUrl,
-            bookSourceName: s.bookSourceName,
-            status: resp.ok ? "success" : "failed",
-            durationMs: Date.now() - t0,
-            searchCount: resp.ok ? 1 : 0,
-            error: resp.ok ? undefined : `HTTP ${resp.status}`,
-          });
-          continue;
-        }
-      }
-
-      results.push({
-        bookSourceUrl: s.bookSourceUrl,
-        bookSourceName: s.bookSourceName,
-        status: "success",
-        durationMs: Date.now() - t0,
-        searchCount: 1,
-      });
-    } catch (err: any) {
-      results.push({
-        bookSourceUrl: s.bookSourceUrl,
-        bookSourceName: s.bookSourceName,
-        status: "failed",
-        durationMs: Date.now() - t0,
-        error: err.message || "请求失败",
-      });
-    }
-  }
-
-  const validCount = results.filter((r) => r.status === "success").length;
-  const invalidCount = results.length - validCount;
-
-  // If markInvalid is enabled, add "失效" to the group of failed sources in D1
-  if (body.markInvalid !== false && invalidCount > 0) {
-    const invalidUrls = new Set(results.filter((r) => r.status !== "success").map((r) => r.bookSourceUrl));
-    const now = Math.floor(Date.now() / 1000);
-    for (const s of allSources) {
-      if (invalidUrls.has(s.bookSourceUrl)) {
-        const groups = (s.bookSourceGroup || "").split(/[,，;；]/).map((g: string) => g.trim()).filter(Boolean);
-        if (!groups.includes("失效")) {
-          groups.push("失效");
-          s.bookSourceGroup = groups.join(",");
-          await env.DB.prepare(
-            `UPDATE book_sources SET json = ?1, updated_at = ?2 WHERE user_ns = ?3 AND book_source_url = ?4`
-          ).bind(JSON.stringify(s), now, userNs, s.bookSourceUrl).run();
-        }
-      }
-    }
-  }
-
-  const mappedResults = results.map((r) => ({
-    bookSourceName: r.bookSourceName,
-    bookSourceUrl: r.bookSourceUrl,
-    valid: r.status === "success",
-    searchOk: r.status === "success",
-    exploreOk: false,
-    keyword,
-    markedInvalid: r.status !== "success",
-    error: r.error,
-  }));
-
-  const summary = {
-    total: results.length,
-    success: validCount,
-    failed: invalidCount,
-    durationMs: Date.now() - startTime,
-  };
-
-  return jsonResponse({
-    isSuccess: true,
-    data: {
-      total: results.length,
-      valid: validCount,
-      invalid: invalidCount,
-      markedInvalid: invalidCount,
-      results: mappedResults,
-      summary,
-    },
-  });
-}
-
-// ==========================================
-// 6. R2 Asset & Cover Handlers
-// ==========================================
-
-async function handleUploadFile(request: Request, env: Env): Promise<Response> {
-  const userNs = await resolveUserNs(request, env);
-  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-
-  const formData = await request.formData();
-  const file = formData.get("file") as unknown as File | null;
-  if (!file) return jsonResponse({ isSuccess: false, errorMsg: "缺少上传文件" });
-
-  const rawName = file.name || "file";
-  const baseName = rawName.split("/").pop()?.split("\\").pop() || "file";
-  const safeName = baseName.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/^\.+/, "") || "file";
-  const fileType = new URL(request.url).searchParams.get("fileType") || "images";
-  const safeFileType = /^[a-zA-Z0-9_-]+$/.test(fileType) ? fileType : "images";
-  const r2Key = `assets/${userNs}/${safeFileType}/${safeName}`;
-
-  await env.BUCKET.put(r2Key, await file.arrayBuffer(), {
-    httpMetadata: { contentType: file.type || "application/octet-stream" },
-  });
-
-  return jsonResponse({
-    isSuccess: true,
-    data: [`/assets/${userNs}/${safeFileType}/${safeName}`],
-  });
-}
-
-async function handleDeleteFile(request: Request, env: Env): Promise<Response> {
-  const userNs = await resolveUserNs(request, env);
-  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-
-  const { url } = await request.json<{ url: string }>();
-  const prefix = `/assets/${userNs}/`;
-  if (!url || !url.startsWith(prefix) || url.includes("..") || url.includes("\\")) {
-    return jsonResponse({ isSuccess: false, errorMsg: "非法文件路径" });
-  }
-
-  const rel = url.substring(prefix.length);
-  const parts = rel.split("/").filter(Boolean);
-  if (parts.length === 0 || parts.some((p) => p === "." || p === "..")) {
-    return jsonResponse({ isSuccess: false, errorMsg: "非法文件路径" });
-  }
-
-  const r2Key = `assets/${userNs}/${parts.join("/")}`;
-  await env.BUCKET.delete(r2Key);
-  return jsonResponse({ isSuccess: true, data: "" });
-}
-
-async function handleGetAsset(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  let path = url.pathname.replace(/^\//, "");
-  if (url.pathname === "/reader3/cover") {
-    path = (url.searchParams.get("path") || "").replace(/^\//, "");
-  }
-
-  if (path.includes("..") || path.includes("\\")) {
-    return new Response("Invalid Path", { status: 400, headers: corsHeaders() });
-  }
-
-  const obj = await env.BUCKET.get(path);
-  let bodyStream: any = null;
-
-  if (obj) {
-    bodyStream = obj.body;
-  } else {
-    // Fallback to remote WebDAV
-    const remoteBytes = await fallbackFetchFromRemoteWebdav(env, path);
-    if (remoteBytes) {
-      bodyStream = remoteBytes;
-    }
-  }
-
-  if (!bodyStream) return new Response("Asset Not Found", { status: 404, headers: corsHeaders() });
-
-  const headers = new Headers(corsHeaders());
-  headers.set("Content-Type", obj?.httpMetadata?.contentType || "application/octet-stream");
-  headers.set("Cache-Control", "public, max-age=31536000");
-
-  return new Response(bodyStream, { headers });
-}
-
-// ==========================================
-// 7. EPUB Streaming & Indexing Implementation
-// ==========================================
-
 async function handleEpubUpload(request: Request, env: Env): Promise<Response> {
   try {
     const userNs = await resolveUserNs(request, env);
@@ -1654,7 +1201,7 @@ async function handleEpubUpload(request: Request, env: Env): Promise<Response> {
       kind: "本地EPUB",
     };
 
-    let shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+    let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
     const idx = shelf.findIndex(
       (b) => b.bookUrl === bookUrl || (b.name === newBook.name && b.origin === newBook.origin)
     );
@@ -1663,7 +1210,7 @@ async function handleEpubUpload(request: Request, env: Env): Promise<Response> {
     } else {
       shelf.unshift(newBook);
     }
-    await saveDocument(env, userNs, "bookshelf.json", shelf);
+    await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
 
     return jsonResponse({
       isSuccess: true,
@@ -1932,7 +1479,7 @@ async function handlePdfUpload(request: Request, env: Env): Promise<Response> {
       kind: "本地PDF",
     };
 
-    let shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+    let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
     const idx = shelf.findIndex(
       (b) => b.bookUrl === bookUrl || (b.name === newBook.name && b.origin === newBook.origin)
     );
@@ -1941,7 +1488,7 @@ async function handlePdfUpload(request: Request, env: Env): Promise<Response> {
     } else {
       shelf.unshift(newBook);
     }
-    await saveDocument(env, userNs, "bookshelf.json", shelf);
+    await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
 
     return jsonResponse({
       isSuccess: true,
@@ -2667,7 +2214,7 @@ async function handleWebdav(request: Request, env: Env): Promise<Response> {
         const text = new TextDecoder().decode(body);
         const data = JSON.parse(text);
         if (baseDocName === "bookshelf.json" && Array.isArray(data)) {
-          await saveDocument(env, userNs, "bookshelf.json", data);
+          await documentHandlers.saveDocument(env, userNs, "bookshelf.json", data);
         } else if (baseDocName === "bookSource.json" && Array.isArray(data)) {
           const now = Math.floor(Date.now() / 1000);
           const stmts = data.filter((s: any) => s && s.bookSourceUrl).map((s: any) =>
@@ -2682,7 +2229,7 @@ async function handleWebdav(request: Request, env: Env): Promise<Response> {
             await env.DB.batch(stmts.slice(i, i + 50));
           }
         } else {
-          await saveDocument(env, userNs, baseDocName, data);
+          await documentHandlers.saveDocument(env, userNs, baseDocName, data);
         }
       } catch (e) {
         console.error("WebDAV to D1 bridge error:", e);
@@ -2700,7 +2247,7 @@ async function handleWebdav(request: Request, env: Env): Promise<Response> {
       baseDocName === "bookmark.json" ||
       baseDocName === "replaceRule.json"
     ) {
-      const doc = await getDocument(env, userNs, baseDocName);
+      const doc = await documentHandlers.getDocument(env, userNs, baseDocName);
       if (doc) {
         const jsonText = JSON.stringify(doc, null, 2);
         const bytes = new TextEncoder().encode(jsonText);
@@ -3119,12 +2666,12 @@ async function syncUserToRemoteWebdav(env: Env, username: string): Promise<{ suc
 
     // 1. Gather all data for this user
     const [shelf, groups, sources, rss, bookmarks, rules] = await Promise.all([
-      getDocument(env, username, "bookshelf.json"),
-      getDocument(env, username, "bookGroup.json"),
+      documentHandlers.getDocument(env, username, "bookshelf.json"),
+      documentHandlers.getDocument(env, username, "bookGroup.json"),
       env.DB.prepare(`SELECT json FROM book_sources WHERE user_ns = ?1`).bind(username).all<{ json: string }>(),
-      getDocument(env, username, "rssSource.json"),
-      getDocument(env, username, "bookmark.json"),
-      getDocument(env, username, "replaceRule.json"),
+      documentHandlers.getDocument(env, username, "rssSource.json"),
+      documentHandlers.getDocument(env, username, "bookmark.json"),
+      documentHandlers.getDocument(env, username, "replaceRule.json"),
     ]);
 
     const parsedSources = (sources.results || []).map((r) => {
@@ -3517,7 +3064,7 @@ async function handleTxtUpload(request: Request, env: Env, ctx: ExecutionContext
       wordCount: `${text.length}字`,
     };
 
-    let shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+    let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
     const idx = shelf.findIndex(
       (b) => b.bookUrl === bookUrl || (b.name === newBook.name && b.origin === newBook.origin)
     );
@@ -3526,7 +3073,7 @@ async function handleTxtUpload(request: Request, env: Env, ctx: ExecutionContext
     } else {
       shelf.unshift(newBook);
     }
-    await saveDocument(env, userNs, "bookshelf.json", shelf);
+    await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
 
     triggerOnChangeSync(env, userNs, ctx);
 
@@ -3603,7 +3150,7 @@ async function handleImportWebdavBook(request: Request, env: Env, ctx: Execution
 
     // Check if book already exists on bookshelf
     const titleWithoutExt = name.replace(/\.[^/.]+$/, "").trim();
-    let shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+    let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
     const existing = shelf.find(
       (b) => b.name === name || b.name === titleWithoutExt || (b.bookUrl && b.bookUrl.toLowerCase().endsWith("/" + name.toLowerCase()))
     );
@@ -3711,7 +3258,7 @@ async function handleImportWebdavBook(request: Request, env: Env, ctx: Execution
     }
 
     if (newBook) {
-      let shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+      let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
       const existingIdx = shelf.findIndex(
         (b) => b.bookUrl === newBook.bookUrl || (b.name === newBook.name && b.origin === newBook.origin)
       );
@@ -3725,7 +3272,7 @@ async function handleImportWebdavBook(request: Request, env: Env, ctx: Execution
       } else {
         shelf.unshift(newBook);
       }
-      await saveDocument(env, userNs, "bookshelf.json", shelf);
+      await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
       triggerOnChangeSync(env, userNs, ctx);
     }
 
@@ -3958,7 +3505,7 @@ async function handleChunkedUploadComplete(request: Request, env: Env, ctx: Exec
     }
 
     if (newBook) {
-      let shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+      let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
       const idx = shelf.findIndex(
         (b) => b.bookUrl === newBook.bookUrl || (b.name === newBook.name && b.origin === newBook.origin)
       );
@@ -3972,7 +3519,7 @@ async function handleChunkedUploadComplete(request: Request, env: Env, ctx: Exec
       } else {
         shelf.unshift(newBook);
       }
-      await saveDocument(env, userNs, "bookshelf.json", shelf);
+      await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
       triggerOnChangeSync(env, userNs, ctx);
     }
 
@@ -4081,7 +3628,7 @@ async function handleAiProxy(request: Request, env: Env): Promise<Response> {
 
   // 1. Check if server config is requested
   if (req.useServerConfig) {
-    const config = await getDocument(env, "__app__", "ai-model-config.json");
+    const config = await documentHandlers.getDocument(env, "__app__", "ai-model-config.json");
     if (config?.text?.enabled) {
       baseUrl = config.text.base_url || config.text.baseUrl || "";
       apiKey = config.text.api_key || config.text.apiKey || "";
@@ -4601,7 +4148,7 @@ async function handleGetShelfBook(request: Request, env: Env): Promise<Response>
     } catch {}
   }
 
-  const shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+  const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
   const book = shelf.find((b) => b.bookUrl === url);
   if (!book) return jsonResponse({ isSuccess: false, errorMsg: "书籍未在书架中" });
   return jsonResponse({ isSuccess: true, data: book });
@@ -4656,7 +4203,7 @@ async function handleGetBookInfo(request: Request, env: Env): Promise<Response> 
   }
 
   // Fallback to bookshelf
-  const shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+  const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
   const book = shelf.find((b) => b.bookUrl === url);
   return jsonResponse({ isSuccess: true, data: book || { bookUrl: url, name: "书籍详情" } });
 }
@@ -4944,11 +4491,11 @@ async function handleSaveBookGroupId(request: Request, env: Env, ctx: ExecutionC
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
   const { bookUrl, groupId } = await request.json<any>();
-  let shelf: any[] = (await getDocument(env, userNs, "bookshelf.json")) || [];
+  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
   const idx = shelf.findIndex((b) => b.bookUrl === bookUrl);
   if (idx >= 0) {
     shelf[idx].group = groupId;
-    await saveDocument(env, userNs, "bookshelf.json", shelf);
+    await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
     triggerOnChangeSync(env, userNs, ctx);
   }
   return jsonResponse({ isSuccess: true, data: "分组修改成功" });
