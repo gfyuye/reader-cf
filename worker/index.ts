@@ -15,6 +15,7 @@ import * as documentHandlers from "./handlers/document";
 import * as authHandlers from "./handlers/auth";
 import * as userAdminHandlers from "./handlers/user-admin";
 import * as cryptoUtils from "./crypto";
+import { handleRequest } from "./router";
 
 export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./types";
 
@@ -46,29 +47,48 @@ const handleGetAsset: any = _stubHandler("handleGetAsset");
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    // 0. Handle CORS Preflight
+    // Delegate to router for migrated routes
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const migrated = [
+      "/reader3/login",
+      "/reader3/logout",
+      "/reader3/getUserInfo",
+      "/reader3/getBookmarks",
+      "/reader3/saveBookmark",
+      "/reader3/deleteBookmark",
+      "/reader3/getReplaceRules",
+      "/reader3/saveReplaceRule",
+      "/reader3/deleteReplaceRule",
+      "/reader3/getBookGroups",
+      "/reader3/saveBookGroup",
+      "/reader3/deleteBookGroup",
+      "/reader3/getRssSources",
+      "/reader3/saveRssSource",
+      "/reader3/saveRssSources",
+      "/reader3/deleteRssSource",
+      "/reader3/deleteRssSources",
+      "/reader3/getAiModelConfig",
+      "/reader3/saveAiModelConfig",
+      "/reader3/changePassword",
+      "/reader3/getUserList",
+      "/reader3/addUser",
+      "/reader3/updateUser",
+      "/reader3/deleteUsers",
+      "/reader3/resetPassword",
+      "/health",
+    ];
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
         headers: corsHeaders(),
       });
     }
-
-    const url = new URL(request.url);
-    const path = url.pathname;
+    if (migrated.includes(path) || path === "/health") {
+      return handleRequest(request, env, ctx);
+    }
 
     try {
-      // 1. User Authentication & Profile
-      if (path === "/reader3/login" && request.method === "POST") {
-        return authHandlers.handleLogin(request, env);
-      }
-      if (path === "/reader3/logout" && request.method === "POST") {
-        return authHandlers.handleLogout(request, env);
-      }
-      if (path === "/reader3/getUserInfo" && request.method === "GET") {
-        return authHandlers.handleGetUserInfo(request, env);
-      }
-
       // 2. Book Sources (书源管理 - D1)
       if (path === "/reader3/getBookSources") {
         return handleGetBookSources(request, env);
