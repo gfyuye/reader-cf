@@ -34,6 +34,34 @@ export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./type
  * Reads variable from runtime env (Cloudflare Dashboard / Secrets) with build-time fallback from .env.example
  */
 
+
+// === TEMP STUBS FOR SPLIT WIP (remove after handlers migrated) ===
+const _stubHandler = (name: string) => (..._args: any[]) => jsonResponse({ isSuccess: false, errorMsg: `${name} not implemented during worker split` }, 501);
+const handleSearchBookMulti: any = _stubHandler("handleSearchBookMulti");
+const handleTestBookSources: any = _stubHandler("handleTestBookSources");
+const handleExploreBook: any = _stubHandler("handleExploreBook");
+const handleGetShelfBook: any = _stubHandler("handleGetShelfBook");
+const handleGetBookInfo: any = _stubHandler("handleGetBookInfo");
+const handleGetChapterList: any = _stubHandler("handleGetChapterList");
+const handleSaveBookGroupId: any = _stubHandler("handleSaveBookGroupId");
+const handleGetRssArticles: any = _stubHandler("handleGetRssArticles");
+const handleGetRssContent: any = _stubHandler("handleGetRssContent");
+const handleUploadFile: any = _stubHandler("handleUploadFile");
+const handleDeleteFile: any = _stubHandler("handleDeleteFile");
+const handleGetAsset: any = _stubHandler("handleGetAsset");
+const handleGetWebdavFileList: any = _stubHandler("handleGetWebdavFileList");
+const handleGetWebdavFile: any = _stubHandler("handleGetWebdavFile");
+const handleUploadFileToWebdav: any = _stubHandler("handleUploadFileToWebdav");
+const handleDeleteWebdavFile: any = _stubHandler("handleDeleteWebdavFile");
+const handleDeleteWebdavFileList: any = _stubHandler("handleDeleteWebdavFileList");
+const handleGetAiBookMemory: any = _stubHandler("handleGetAiBookMemory");
+const handleSaveAiBookMemory: any = _stubHandler("handleSaveAiBookMemory");
+const handleDeleteAiBookMemory: any = _stubHandler("handleDeleteAiBookMemory");
+const handleAiProxy: any = _stubHandler("handleAiProxy");
+const handleAiProxyImage: any = _stubHandler("handleAiProxyImage");
+// === END TEMP STUBS ===
+
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // Delegate to router for migrated routes
@@ -209,13 +237,13 @@ export default {
 
       // 10. WebDAV Book Import & Move
       if (path === "/reader3/importWebdavBook" && request.method === "POST") {
-        return handleImportWebdavBook(request, env, ctx);
+        return uploadHandlers.handleImportWebdavBook(request, env, ctx);
       }
 
       // Chunked Upload for Big Files (100MB ~ 1GB+)
-      if (path === "/reader3/upload/init" && request.method === "POST") return handleChunkedUploadInit(request, env);
-      if (path === "/reader3/upload/part" && request.method === "POST") return handleChunkedUploadPart(request, env);
-      if (path === "/reader3/upload/complete" && request.method === "POST") return handleChunkedUploadComplete(request, env, ctx);
+      if (path === "/reader3/upload/init" && request.method === "POST") return uploadHandlers.handleChunkedUploadInit(request, env);
+      if (path === "/reader3/upload/part" && request.method === "POST") return uploadHandlers.handleChunkedUploadPart(request, env);
+      if (path === "/reader3/upload/complete" && request.method === "POST") return uploadHandlers.handleChunkedUploadComplete(request, env, ctx);
 
       // 10. Assets & Covers (R2)
       if (path === "/reader3/uploadFile" && request.method === "POST") return handleUploadFile(request, env);
