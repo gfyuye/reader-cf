@@ -32,7 +32,7 @@ export async function handleChunkedUploadPart(request: Request, env: Env): Promi
   const formData = await request.formData();
   const uploadId = formData.get("uploadId") as string;
   const partNumber = parseInt(formData.get("partNumber") as string, 10);
-  const file = formData.get("file") as File;
+  const file = formData.get("file") as unknown as File;
   if (!uploadId || !partNumber || !file) {
     return jsonResponse({ isSuccess: false, errorMsg: "缺少分片参数" });
   }
