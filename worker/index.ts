@@ -34,6 +34,34 @@ export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./type
  * Reads variable from runtime env (Cloudflare Dashboard / Secrets) with build-time fallback from .env.example
  */
 
+
+// === TEMP STUBS FOR SPLIT WIP (remove after handlers migrated) ===
+const _stubHandler = (name: string) => (..._args: any[]) => jsonResponse({ isSuccess: false, errorMsg: `${name} not implemented during worker split` }, 501);
+const handleSearchBookMulti: any = _stubHandler("handleSearchBookMulti");
+const handleTestBookSources: any = _stubHandler("handleTestBookSources");
+const handleExploreBook: any = _stubHandler("handleExploreBook");
+const handleGetShelfBook: any = _stubHandler("handleGetShelfBook");
+const handleGetBookInfo: any = _stubHandler("handleGetBookInfo");
+const handleGetChapterList: any = _stubHandler("handleGetChapterList");
+const handleSaveBookGroupId: any = _stubHandler("handleSaveBookGroupId");
+const handleGetRssArticles: any = _stubHandler("handleGetRssArticles");
+const handleGetRssContent: any = _stubHandler("handleGetRssContent");
+const handleUploadFile: any = _stubHandler("handleUploadFile");
+const handleDeleteFile: any = _stubHandler("handleDeleteFile");
+const handleGetAsset: any = _stubHandler("handleGetAsset");
+const handleGetWebdavFileList: any = _stubHandler("handleGetWebdavFileList");
+const handleGetWebdavFile: any = _stubHandler("handleGetWebdavFile");
+const handleUploadFileToWebdav: any = _stubHandler("handleUploadFileToWebdav");
+const handleDeleteWebdavFile: any = _stubHandler("handleDeleteWebdavFile");
+const handleDeleteWebdavFileList: any = _stubHandler("handleDeleteWebdavFileList");
+const handleGetAiBookMemory: any = _stubHandler("handleGetAiBookMemory");
+const handleSaveAiBookMemory: any = _stubHandler("handleSaveAiBookMemory");
+const handleDeleteAiBookMemory: any = _stubHandler("handleDeleteAiBookMemory");
+const handleAiProxy: any = _stubHandler("handleAiProxy");
+const handleAiProxyImage: any = _stubHandler("handleAiProxyImage");
+// === END TEMP STUBS ===
+
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // Delegate to router for migrated routes
