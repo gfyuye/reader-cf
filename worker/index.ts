@@ -22,6 +22,9 @@ import * as contentHandlers from "./handlers/content";
 import * as epubHandlers from "./handlers/epub";
 import * as pdfHandlers from "./handlers/pdf";
 import * as txtHandlers from "./handlers/txt";
+import * as rssHandlers from "./handlers/rss";
+import * as aiHandlers from "./handlers/ai";
+import * as assetHandlers from "./handlers/asset";
 import * as webdavHandlers from "./handlers/webdav";
 import { handleRequest } from "./router";
 
@@ -77,6 +80,18 @@ const {
   handleTestRemoteWebdav,
   handleSyncRemoteWebdavNow,
 } = webdavHandlers;
+
+const { handleGetRssArticles, handleGetRssContent } = rssHandlers;
+
+const {
+  handleGetAiBookMemory,
+  handleSaveAiBookMemory,
+  handleDeleteAiBookMemory,
+  handleAiProxy,
+  handleAiProxyImage,
+} = aiHandlers;
+
+const { handleGetAsset } = assetHandlers;
 
 /**
  * Cloudflare Worker Backend for reader-rust
@@ -229,8 +244,8 @@ export default {
       if (path === "/reader3/saveRssSources" && request.method === "POST") return documentHandlers.handleSaveDocumentItems(request, env, "rssSource.json", ctx);
       if (path === "/reader3/deleteRssSource" && request.method === "POST") return documentHandlers.handleDeleteDocumentItem(request, env, "rssSource.json", ctx);
       if (path === "/reader3/deleteRssSources" && request.method === "POST") return documentHandlers.handleDeleteDocumentItems(request, env, "rssSource.json", ctx);
-      if (path === "/reader3/getRssArticles") return handleGetRssArticles(request, env);
-      if (path === "/reader3/getRssContent") return handleGetRssContent(request, env);
+      if (path === "/reader3/getRssArticles") return rssHandlers.handleGetRssArticles(request, env);
+      if (path === "/reader3/getRssContent") return rssHandlers.handleGetRssContent(request, env);
 
       // 6. EPUB Streaming & Indexing
       if ((path === "/reader3/epub/upload" || path === "/reader3/uploadEpubBook") && request.method === "POST") return handleEpubUpload(request, env);
@@ -278,7 +293,7 @@ export default {
       // 10. Assets & Covers (R2)
       if (path === "/reader3/uploadFile" && request.method === "POST") return handleUploadFile(request, env, ctx);
       if (path === "/reader3/deleteFile" && request.method === "POST") return handleDeleteFile(request, env, ctx);
-      if (path.startsWith("/assets/") || path === "/reader3/cover") return handleGetAsset(request, env);
+      if (path.startsWith("/assets/") || path === "/reader3/cover") return assetHandlers.handleGetAsset(request, env);
 
       // 10. WebDAV Protocol & REST APIs (for Web & App)
       if (path.startsWith("/reader3/webdav")) return handleWebdav(request, env);
@@ -311,13 +326,13 @@ export default {
       }
 
       // 12. AI Companion & Reading Assistant (D1 + LLM Proxy)
-      if (path === "/reader3/getAiBookMemory") return handleGetAiBookMemory(request, env);
-      if (path === "/reader3/saveAiBookMemory" && request.method === "POST") return handleSaveAiBookMemory(request, env);
-      if (path === "/reader3/deleteAiBookMemory" && request.method === "POST") return handleDeleteAiBookMemory(request, env);
+      if (path === "/reader3/getAiBookMemory") return aiHandlers.handleGetAiBookMemory(request, env);
+      if (path === "/reader3/saveAiBookMemory" && request.method === "POST") return aiHandlers.handleSaveAiBookMemory(request, env);
+      if (path === "/reader3/deleteAiBookMemory" && request.method === "POST") return aiHandlers.handleDeleteAiBookMemory(request, env);
       if (path === "/reader3/getAiModelConfig") return documentHandlers.handleGetDocument(request, env, "ai-model-config.json");
       if (path === "/reader3/saveAiModelConfig" && request.method === "POST") return documentHandlers.handleSaveDocumentItem(request, env, "ai-model-config.json", ctx);
-      if (path === "/reader3/aiProxy" && request.method === "POST") return handleAiProxy(request, env);
-      if (path === "/reader3/aiProxyImage" && request.method === "POST") return handleAiProxyImage(request, env);
+      if (path === "/reader3/aiProxy" && request.method === "POST") return aiHandlers.handleAiProxy(request, env);
+      if (path === "/reader3/aiProxyImage" && request.method === "POST") return aiHandlers.handleAiProxyImage(request, env);
 
       // Health check
       if (path === "/health") {
@@ -349,19 +364,11 @@ const handleGetShelfBook: any = _stubHandler("handleGetShelfBook");
 const handleGetBookInfo: any = _stubHandler("handleGetBookInfo");
 const handleGetChapterList: any = _stubHandler("handleGetChapterList");
 const handleSaveBookGroupId: any = _stubHandler("handleSaveBookGroupId");
-const handleGetRssArticles: any = _stubHandler("handleGetRssArticles");
-const handleGetRssContent: any = _stubHandler("handleGetRssContent");
-const handleGetAsset: any = _stubHandler("handleGetAsset");
 const handleGetWebdavFileList: any = _stubHandler("handleGetWebdavFileList");
 const handleGetWebdavFile: any = _stubHandler("handleGetWebdavFile");
 const handleUploadFileToWebdav: any = _stubHandler("handleUploadFileToWebdav");
 const handleDeleteWebdavFile: any = _stubHandler("handleDeleteWebdavFile");
 const handleDeleteWebdavFileList: any = _stubHandler("handleDeleteWebdavFileList");
-const handleGetAiBookMemory: any = _stubHandler("handleGetAiBookMemory");
-const handleSaveAiBookMemory: any = _stubHandler("handleSaveAiBookMemory");
-const handleDeleteAiBookMemory: any = _stubHandler("handleDeleteAiBookMemory");
-const handleAiProxy: any = _stubHandler("handleAiProxy");
-const handleAiProxyImage: any = _stubHandler("handleAiProxyImage");
 const handleUploadFile: any = _stubHandler("handleUploadFile");
 const handleDeleteFile: any = _stubHandler("handleDeleteFile");
 // === END STUBS ===

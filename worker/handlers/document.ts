@@ -24,6 +24,12 @@ export async function saveDocument(env: Env, namespace: string, name: string, da
     .run();
 }
 
+export async function deleteDocument(env: Env, namespace: string, name: string): Promise<void> {
+  await env.DB.prepare(`DELETE FROM json_documents WHERE namespace = ?1 AND name = ?2`)
+    .bind(namespace, name)
+    .run();
+}
+
 export async function handleGetDocument(request: Request, env: Env, name: string): Promise<Response> {
   const userNs = await resolveUserNs(request, env);
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
