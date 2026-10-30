@@ -6,8 +6,10 @@ import * as userAdminHandlers from "./handlers/user-admin";
 import * as bookSourceHandlers from "./handlers/book-source";
 import * as bookshelfHandlers from "./handlers/bookshelf";
 import * as contentHandlers from "./handlers/content";
+import * as epubHandlers from "./handlers/epub";
+import * as pdfHandlers from "./handlers/pdf";
+import * as txtHandlers from "./handlers/txt";
 import * as webdavHandlers from "./handlers/webdav";
-import * as epubPdfTxtHandlers from "./handlers/epub-pdf-txt";
 
 export async function handleRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (request.method === "OPTIONS") {
@@ -94,17 +96,17 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
 
     // EPUB/PDF/TXT
     if (path === "/reader3/epub" || path.startsWith("/reader3/epub/")) {
-      if ((epubPdfTxtHandlers as any).handleEpubRead) {
+      if (epubHandlers.handleEpubRead) {
         const url = new URL(request.url);
         const bookId = url.searchParams.get("bookId") || path.split("/").pop() || "";
         const index = parseInt(url.searchParams.get("index") || url.searchParams.get("page") || "0", 10);
-        return (epubPdfTxtHandlers as any).handleEpubRead(bookId, index, env);
+        return epubHandlers.handleEpubRead(bookId, index, env);
       }
       return jsonResponse({error:'not impl'}, 500);
     }
-    if (path === "/reader3/upload" && request.method === "POST") return epubPdfTxtHandlers.handleTxtUpload ? epubPdfTxtHandlers.handleTxtUpload(request, env, ctx) : jsonResponse({isSuccess:false,errorMsg:'not impl'});
-    if (path === "/reader3/uploadFile" && request.method === "POST") return epubPdfTxtHandlers.handleUploadFile ? epubPdfTxtHandlers.handleUploadFile(request, env, ctx) : jsonResponse({isSuccess:false,errorMsg:'not impl'});
-    if (path === "/reader3/deleteFile" && request.method === "POST") return epubPdfTxtHandlers.handleDeleteFile ? epubPdfTxtHandlers.handleDeleteFile(request, env, ctx) : jsonResponse({isSuccess:false,errorMsg:'not impl'});
+    if (path === "/reader3/upload" && request.method === "POST") return txtHandlers.handleTxtUpload ? txtHandlers.handleTxtUpload(request, env, ctx) : jsonResponse({isSuccess:false,errorMsg:'not impl'});
+    if (path === "/reader3/uploadFile" && request.method === "POST") return jsonResponse({isSuccess:false,errorMsg:'not impl'});
+    if (path === "/reader3/deleteFile" && request.method === "POST") return jsonResponse({isSuccess:false,errorMsg:'not impl'});
 
     // Health check
     if (path === "/health") {

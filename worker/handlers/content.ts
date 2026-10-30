@@ -5,7 +5,8 @@ import { Env } from "../types";
 import { isSafeRemoteUrl, fetchTextWithEncoding } from "../utils";
 import { parseContentWithRules } from "../legado-engine";
 import * as cryptoUtils from "../crypto";
-import { readTxtChapterText, readEpubChapterHtml } from "./epub-pdf-txt";
+import { readTxtChapterText } from "./txt";
+import { readEpubChapterHtml } from "./epub";
 import { getDynamicHeaders } from "./bookshelf";
 
 export async function handleGetBookContent(request: Request, env: Env): Promise<Response> {

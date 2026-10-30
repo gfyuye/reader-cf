@@ -5,7 +5,7 @@ import { Env } from "../types";
 import * as cryptoUtils from "../crypto";
 import { isSafeRemoteUrl } from "../utils";
 import * as documentHandlers from "../handlers/document";
-import { createZipArchive } from "../handlers/epub-pdf-txt";
+import { createZipArchive } from "./epub";
 
 export async function resolveWebdavUser(request: Request, env: Env): Promise<string | null> {
   const auth = request.headers.get("Authorization") || "";

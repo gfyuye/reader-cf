@@ -1,14 +1,11 @@
 import { jsonResponse, corsHeaders } from "../http";
 import { resolveUserNs } from "../auth";
 import { getEnv } from "../env";
-import { randomString, isSafeRemoteUrl } from "../utils";
 import { Env } from "../types";
-import * as cryptoUtils from "../crypto";
 import * as documentHandlers from "../handlers/document";
 import { md5Hex as md5 } from "../md5";
-import { triggerOnChangeSync, fallbackFetchFromRemoteWebdav } from "./webdav";
+import { fallbackFetchFromRemoteWebdav } from "./webdav";
 
-// CRC32 implementation (was in removed duplicate section)
 function crc32(data: Uint8Array): number {
   let crc = 0xFFFFFFFF;
   for (let i = 0; i < data.length; i++) {
@@ -137,250 +134,6 @@ export async function createZipArchive(files: Record<string, string>): Promise<U
   return result;
 }
 
-// ==========================================
-// 13. TXT Novel Streaming & Heading Indexer
-// ==========================================
-
-function decodeTxtBytes(bytes: Uint8Array): string {
-  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    return new TextDecoder("utf-8").decode(bytes.subarray(3));
-  }
-  try {
-    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
-  } catch {
-    try {
-      return new TextDecoder("gb18030").decode(bytes);
-    } catch {
-      return new TextDecoder("utf-8").decode(bytes);
-    }
-  }
-}
-
-function scanTxtChapterOffsets(text: string, utf8Bytes: Uint8Array): Array<{ title: string; offset: number; length: number }> {
-  const regex = /^\s*(第[0-9一二三四五六七八九十百千万零两]+[章回节卷集幕篇部话段]|Chapter\s+\d+|序章|引子|楔子|尾声|番外)[^\r\n]*$/gm;
-  const matches: Array<{ title: string; charIndex: number }> = [];
-
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    matches.push({
-      title: match[0].trim(),
-      charIndex: match.index,
-    });
-  }
-
-  if (matches.length === 0) {
-    return [{ title: "全本", offset: 0, length: utf8Bytes.length }];
-  }
-
-  // Convert charIndex to UTF-8 byte offset
-  let curChar = 0;
-  let curByte = 0;
-  let matchPtr = 0;
-
-  const byteOffsets: number[] = [];
-  while (curChar < text.length && matchPtr < matches.length) {
-    if (curChar === matches[matchPtr].charIndex) {
-      byteOffsets.push(curByte);
-      matchPtr++;
-    }
-    const code = text.charCodeAt(curChar);
-    curChar++;
-    if (code <= 0x7f) curByte += 1;
-    else if (code <= 0x7ff) curByte += 2;
-    else if (code >= 0xd800 && code <= 0xdbff) {
-      curChar++;
-      curByte += 4;
-    } else curByte += 3;
-  }
-
-  const chapters: Array<{ title: string; offset: number; length: number }> = [];
-
-  // If first chapter starts after character 0, add "序章"
-  if (byteOffsets.length > 0 && byteOffsets[0] > 0) {
-    chapters.push({
-      title: "序章",
-      offset: 0,
-      length: byteOffsets[0],
-    });
-  }
-
-  for (let i = 0; i < byteOffsets.length; i++) {
-    const start = byteOffsets[i];
-    const end = i + 1 < byteOffsets.length ? byteOffsets[i + 1] : utf8Bytes.length;
-    const len = end - start;
-    if (len > 0) {
-      chapters.push({
-        title: matches[i].title,
-        offset: start,
-        length: len,
-      });
-    }
-  }
-
-  return chapters;
-}
-
-export async function handleTxtUpload(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  try {
-    const userNs = await resolveUserNs(request, env);
-    if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-    let fileName = "book.txt";
-    let fileBuffer: ArrayBuffer;
-
-    const contentType = request.headers.get("Content-Type") || "";
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await request.formData();
-      const file = formData.get("file") as unknown as File | null;
-      if (!file) return jsonResponse({ isSuccess: false, errorMsg: "缺少 TXT 文件" });
-      fileName = file.name || "book.txt";
-      fileBuffer = await file.arrayBuffer();
-    } else {
-      fileName = request.headers.get("X-File-Name") || "book.txt";
-      fileBuffer = await request.arrayBuffer();
-    }
-
-    const rawBytes = new Uint8Array(fileBuffer);
-    if (rawBytes.length === 0) return jsonResponse({ isSuccess: false, errorMsg: "文件内容为空" });
-
-    // 1. Decode with automatic GBK / UTF-8 detection
-    const text = decodeTxtBytes(rawBytes);
-    // 2. Re-encode to clean UTF-8
-    const utf8Bytes = new TextEncoder().encode(text);
-    const fileSize = utf8Bytes.length;
-
-    const safeName = fileName.replace(/[/\\?%*:|"<>]/g, "_");
-    const bookId = `txt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    const r2Key = `webdav/${userNs}/book/${safeName}`;
-
-    // 3. Store UTF-8 text into R2
-    await env.BUCKET.put(r2Key, utf8Bytes, {
-      httpMetadata: { contentType: "text/plain; charset=utf-8" },
-    });
-
-    // 4. Scan chapter heading offsets
-    const chapters = scanTxtChapterOffsets(text, utf8Bytes);
-    const totalChapters = chapters.length;
-    const title = fileName.replace(/\.txt$/i, "");
-    const now = Math.floor(Date.now() / 1000);
-
-    // 5. Save metadata into D1 txt_books
-    await env.DB.prepare(
-      `INSERT INTO txt_books (book_id, user_ns, file_name, r2_key, file_size, total_chapters, title, author, status, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '本地导入', 'ready', ?8, ?9)
-       ON CONFLICT(book_id) DO UPDATE SET file_size=excluded.file_size, total_chapters=excluded.total_chapters, title=excluded.title, updated_at=excluded.updated_at`
-    )
-      .bind(bookId, userNs, fileName, r2Key, fileSize, totalChapters, title, now, now)
-      .run();
-
-    // 6. Batch save chapter slice indices into D1 txt_chapters
-    const stmts = chapters.map((ch, idx) =>
-      env.DB.prepare(
-        `INSERT INTO txt_chapters (book_id, chapter_index, title, byte_offset, byte_length, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(book_id, chapter_index) DO UPDATE SET byte_offset=excluded.byte_offset, byte_length=excluded.byte_length`
-      ).bind(bookId, idx, ch.title, ch.offset, ch.length, now)
-    );
-
-    for (let i = 0; i < stmts.length; i += 50) {
-      await env.DB.batch(stmts.slice(i, i + 50));
-    }
-
-    // 7. Add book to user's bookshelf.json
-    const bookUrl = `local-txt:${bookId}`;
-    const newBook = {
-      name: title,
-      author: "本地导入",
-      bookUrl: bookUrl,
-      origin: "local-txt",
-      originName: "本地 TXT",
-      tocUrl: bookUrl,
-      canUpdate: false,
-      durChapterIndex: 0,
-      durChapterPos: 0,
-      durChapterTitle: chapters[0]?.title || "第一章",
-      durChapterTime: Date.now(),
-      totalChapterNum: totalChapters,
-      latestChapterTitle: chapters[chapters.length - 1]?.title,
-      kind: "本地TXT",
-      wordCount: `${text.length}字`,
-    };
-
-    let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
-    const idx = shelf.findIndex(
-      (b) => b.bookUrl === bookUrl || (b.name === newBook.name && b.origin === newBook.origin)
-    );
-    if (idx >= 0) {
-      shelf[idx] = { ...shelf[idx], ...newBook, bookUrl: shelf[idx].bookUrl, durChapterTime: Date.now() };
-    } else {
-      shelf.unshift(newBook);
-    }
-    await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
-
-    triggerOnChangeSync(env, userNs, ctx);
-
-    return jsonResponse({
-      isSuccess: true,
-      data: newBook,
-    });
-  } catch (err: any) {
-    return jsonResponse({ isSuccess: false, errorMsg: err.message });
-  }
-}
-
-export async function handleTxtRead(bookId: string, chapterIndex: number, env: Env): Promise<Response> {
-  try {
-    const text = await readTxtChapterText(bookId, chapterIndex, env);
-    return new Response(text, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        ...corsHeaders(),
-      },
-    });
-  } catch (err: any) {
-    return jsonResponse({ isSuccess: false, errorMsg: err.message });
-  }
-}
-
-export async function readTxtChapterText(bookId: string, chapterIndex: number, env: Env): Promise<string> {
-  const chapter = await env.DB.prepare(
-    `SELECT c.byte_offset, c.byte_length, b.r2_key
-     FROM txt_chapters c
-     JOIN txt_books b ON c.book_id = b.book_id
-     WHERE c.book_id = ?1 AND c.chapter_index = ?2`
-  )
-    .bind(bookId, chapterIndex)
-    .first<{ byte_offset: number; byte_length: number; r2_key: string }>();
-
-  if (!chapter) throw new Error("未找到该 TXT 章节切片");
-
-  const obj = await env.BUCKET.get(chapter.r2_key, {
-    range: { offset: chapter.byte_offset, length: chapter.byte_length },
-  });
-  let payload: Uint8Array | null = obj ? new Uint8Array(await obj.arrayBuffer()) : null;
-
-  if (!payload) {
-    // Fallback to remote WebDAV if R2 is unavailable or missing object
-    payload = await fallbackFetchFromRemoteWebdav(env, chapter.r2_key, {
-      offset: chapter.byte_offset,
-      length: chapter.byte_length,
-    });
-  }
-
-  if (!payload) throw new Error("本地书籍不存在，请重新导入");
-  return new TextDecoder().decode(payload);
-}
-
-export async function handleTxtInfo(bookId: string, env: Env): Promise<Response> {
-  const book = await env.DB.prepare(
-    `SELECT book_id, file_name, title, author, total_chapters, file_size, status FROM txt_books WHERE book_id = ?1`
-  )
-    .bind(bookId)
-    .first();
-
-  if (!book) return jsonResponse({ isSuccess: false, errorMsg: "未找到该 TXT 书籍" });
-  return jsonResponse({ isSuccess: true, data: book });
-}
-
 export async function handleEpubUpload(request: Request, env: Env): Promise<Response> {
   try {
     const userNs = await resolveUserNs(request, env);
@@ -482,7 +235,6 @@ export async function readEpubChapterHtml(bookId: string, chapterIndex: number, 
 
   if (!chapter) throw new Error("章节尚未完成分片索引");
 
-  // Read 30-byte local header to compute exact data offset with extra fields
   const localHdrObj = await env.BUCKET.get(chapter.r2_key, {
     range: { offset: chapter.byte_offset, length: 30 },
   });
@@ -496,7 +248,6 @@ export async function readEpubChapterHtml(bookId: string, chapterIndex: number, 
   let payload: Uint8Array | null = obj ? new Uint8Array(await obj.arrayBuffer()) : null;
 
   if (!payload) {
-    // Fallback to remote WebDAV if R2 is unavailable or missing object
     payload = await fallbackFetchFromRemoteWebdav(env, chapter.r2_key, {
       offset: dataOffset,
       length: chapter.byte_length,
@@ -516,12 +267,10 @@ export async function readEpubChapterHtml(bookId: string, chapterIndex: number, 
     throw new Error(`不支持的压缩格式: ${chapter.compression_method}`);
   }
 
-  // Read next chapter info to determine boundary if in same file
   const nextChapter = await env.DB.prepare(
     `SELECT file_name FROM epub_chapters WHERE book_id = ?1 AND chapter_index = ?2`
   ).bind(bookId, chapterIndex + 1).first<{ file_name: string }>();
 
-  // 1. Slice by anchors: start anchor and next anchor in same file
   const currentFile = chapter.file_name?.split("#")[0] || "";
   const nextFile = nextChapter?.file_name?.split("#")[0] || "";
   const startAnchor = chapter.file_name?.includes("#") ? chapter.file_name.split("#")[1] : "";
@@ -530,8 +279,6 @@ export async function readEpubChapterHtml(bookId: string, chapterIndex: number, 
     : "";
 
   let html = sliceHtmlByAnchors(rawHtml, startAnchor, nextAnchor);
-
-  // 2. Rewrite all image URLs to /reader3/epub/asset?bookId=...&path=...
   html = rewriteEpubHtmlAssets(html, bookId, chapter.file_name?.split("#")[0] || "");
 
   return html;
@@ -647,192 +394,6 @@ async function markBookReady(bookId: string, total: number, env: Env): Promise<v
   await env.DB.prepare(`DELETE FROM epub_parse_checkpoints WHERE book_id = ?1`).bind(bookId).run();
 }
 
-// ==========================================
-// 8. PDF Streaming Implementation
-// ==========================================
-
-export async function handlePdfUpload(request: Request, env: Env): Promise<Response> {
-  try {
-    const userNs = await resolveUserNs(request, env);
-    if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-
-    let fileName = "book.pdf";
-    let bodyBytes: Uint8Array;
-    const contentType = request.headers.get("Content-Type") || "";
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await request.formData();
-      const file = formData.get("file") as unknown as File | null;
-      if (!file) return jsonResponse({ isSuccess: false, errorMsg: "缺少 PDF 文件" });
-      fileName = file.name || "book.pdf";
-      bodyBytes = new Uint8Array(await file.arrayBuffer());
-    } else {
-      const rawHeaderName = request.headers.get("X-File-Name");
-      fileName = rawHeaderName ? decodeURIComponent(rawHeaderName) : "book.pdf";
-      bodyBytes = new Uint8Array(await request.arrayBuffer());
-    }
-
-    const safeName = fileName.replace(/[/\\?%*:|"<>]/g, "_");
-    const bookId = `pdf_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    const r2Key = `webdav/${userNs}/book/${safeName}`;
-
-    await env.BUCKET.put(r2Key, bodyBytes, {
-      httpMetadata: { contentType: "application/pdf" },
-    });
-
-    const fileSize = bodyBytes.byteLength;
-    const tailSize = Math.min(65536, fileSize);
-    const tailText = new TextDecoder().decode(bodyBytes.subarray(fileSize - tailSize));
-
-    const countMatch = tailText.match(/\/Count\s+(\d+)/);
-    const totalPages = countMatch ? parseInt(countMatch[1], 10) : 1;
-    const titleMatch = tailText.match(/\/Title\s*\(([^)]+)\)/);
-    const authorMatch = tailText.match(/\/Author\s*\(([^)]+)\)/);
-
-    const title = titleMatch ? titleMatch[1].trim() : fileName.replace(/\.pdf$/i, "");
-    const author = authorMatch ? authorMatch[1].trim() : "未知作者";
-    const now = Math.floor(Date.now() / 1000);
-
-    await env.DB.prepare(
-      `INSERT INTO pdf_books (book_id, user_ns, file_name, r2_key, file_size, total_pages, title, author, status, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'ready', ?9, ?10)`
-    ).bind(bookId, userNs, fileName, r2Key, fileSize, totalPages, title, author, now, now).run();
-
-    const bookUrl = `local-pdf:${bookId}`;
-    const newBook = {
-      name: title,
-      author: author,
-      bookUrl,
-      origin: "local-pdf",
-      originName: "本地 PDF",
-      tocUrl: bookUrl,
-      canUpdate: false,
-      durChapterIndex: 1,
-      durChapterPos: 0,
-      durChapterTitle: "第 1 页",
-      durChapterTime: Date.now(),
-      totalChapterNum: totalPages,
-      kind: "本地PDF",
-    };
-
-    let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
-    const idx = shelf.findIndex(
-      (b) => b.bookUrl === bookUrl || (b.name === newBook.name && b.origin === newBook.origin)
-    );
-    if (idx >= 0) {
-      shelf[idx] = { ...shelf[idx], ...newBook, bookUrl: shelf[idx].bookUrl, durChapterTime: Date.now() };
-    } else {
-      shelf.unshift(newBook);
-    }
-    await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
-
-    return jsonResponse({
-      isSuccess: true,
-      data: newBook,
-    });
-  } catch (err: any) {
-    return jsonResponse({ isSuccess: false, errorMsg: err.message });
-  }
-}
-
-export async function handlePdfStream(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const bookId = url.searchParams.get("bookId") || "";
-
-  const book = await env.DB.prepare(
-    `SELECT r2_key, file_size FROM pdf_books WHERE book_id = ?1`
-  ).bind(bookId).first<{ r2_key: string; file_size: number }>();
-
-  if (!book) return jsonResponse({ isSuccess: false, errorMsg: "未找到该 PDF 书籍" });
-
-  const rangeHeader = request.headers.get("Range");
-  const r2Options: R2GetOptions = {};
-  let rangeOffset = 0;
-  let rangeLength: number | undefined;
-
-  if (rangeHeader) {
-    const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
-    if (match) {
-      const offset = parseInt(match[1], 10);
-      if (offset >= book.file_size) {
-        const headers = new Headers(corsHeaders());
-        headers.set("Content-Range", `bytes */${book.file_size}`);
-        return new Response(null, { status: 416, headers });
-      }
-      const rawEnd = match[2] ? parseInt(match[2], 10) : undefined;
-      const end = rawEnd !== undefined ? Math.min(rawEnd, book.file_size - 1) : book.file_size - 1;
-      const length = Math.max(0, end - offset + 1);
-      rangeOffset = offset;
-      rangeLength = length;
-      r2Options.range = { offset, length };
-    }
-  }
-
-  const obj = await env.BUCKET.get(book.r2_key, r2Options);
-  let bodyStream: any = null;
-  let byteLen = 0;
-
-  if (obj) {
-    bodyStream = obj.body;
-    byteLen = rangeLength !== undefined ? rangeLength : Math.max(0, book.file_size - rangeOffset);
-  } else {
-    // Fallback to remote WebDAV
-    const remoteBytes = await fallbackFetchFromRemoteWebdav(env, book.r2_key, {
-      offset: rangeOffset,
-      length: rangeLength,
-    });
-    if (remoteBytes) {
-      bodyStream = remoteBytes;
-      byteLen = remoteBytes.length;
-    }
-  }
-
-  if (!bodyStream) return jsonResponse({ isSuccess: false, errorMsg: "文件未找到 (R2 与远端 WebDAV 均未命中)" });
-
-  const headers = new Headers(corsHeaders());
-  headers.set("Content-Type", "application/pdf");
-  headers.set("Accept-Ranges", "bytes");
-  headers.set("Access-Control-Expose-Headers", "Accept-Ranges, Content-Range, Content-Length");
-
-  if (rangeLength !== undefined) {
-    const end = rangeOffset + byteLen - 1;
-    headers.set("Content-Range", `bytes ${rangeOffset}-${end}/${book.file_size}`);
-    headers.set("Content-Length", byteLen.toString());
-    return new Response(bodyStream, { status: 206, headers });
-  }
-
-  headers.set("Content-Length", book.file_size.toString());
-  return new Response(bodyStream, { status: 200, headers });
-}
-
-export async function handlePdfInfo(bookId: string, env: Env): Promise<Response> {
-  const book = await env.DB.prepare(
-    `SELECT book_id, file_name, title, author, total_pages, file_size, status FROM pdf_books WHERE book_id = ?1`
-  ).bind(bookId).first();
-  return jsonResponse({ isSuccess: true, data: book });
-}
-
-export async function handlePdfToc(bookId: string, env: Env): Promise<Response> {
-  const outlines = await env.DB.prepare(
-    `SELECT title, dest_page, level FROM pdf_outlines WHERE book_id = ?1 ORDER BY dest_page ASC`
-  ).bind(bookId).all();
-  return jsonResponse({ isSuccess: true, data: outlines.results });
-}
-
-// ==========================================
-// 9. Utilities: Security, CORS, Parsing
-// ==========================================
-
-function generateSessionToken(username: string): string {
-  return `${Date.now()}_${randomString(16)}`;
-}
-
-
-
-function genEncryptedPassword(password: string, salt: string): string {
-  const first = md5(password + salt);
-  return md5(first + salt);
-}
-
 // === ZIP / EPUB Helpers ===
 
 interface CentralDirEntry {
@@ -926,7 +487,6 @@ function parseOpfPackage(xml: string, opfDir: string): {
   let ncxId: string | null = null;
   let navPath: string | null = null;
 
-  // Match <item ...> regardless of attribute order
   const itemTagRegex = /<item\b([^>]*?)\/?>/gi;
   let match;
   while ((match = itemTagRegex.exec(xml)) !== null) {
@@ -972,7 +532,6 @@ function parseOpfPackage(xml: string, opfDir: string): {
     }
   }
 
-  // Fallback: if spine is empty, take all xhtml/html items from manifest
   if (spinePaths.length === 0) {
     for (const [_, path] of manifest.entries()) {
       const lower = path.toLowerCase();
@@ -1211,7 +770,6 @@ async function indexEpubIntoDatabase(
   const opfDir = opfPath.includes("/") ? opfPath.substring(0, opfPath.lastIndexOf("/")) : "";
   const { title, author, spinePaths, ncxPath, navPath } = parseOpfPackage(opfXml, opfDir);
 
-  // Read TOC (NCX or Nav)
   let tocItems: EpubTocItem[] = [];
   const targetNcx = ncxPath || "toc.ncx";
   let ncxEntry = entries.find(
@@ -1322,12 +880,3 @@ async function indexEpubIntoDatabase(
 
   return { title, author, totalChapters };
 }
-
-export async function handleUploadFile(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  return jsonResponse({ isSuccess: false, errorMsg: "not implemented" });
-}
-
-export async function handleDeleteFile(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  return jsonResponse({ isSuccess: false, errorMsg: "not implemented" });
-}
-

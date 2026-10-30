@@ -19,7 +19,9 @@ import * as uploadHandlers from "./handlers/upload";
 import * as bookSourceHandlers from "./handlers/book-source";
 import * as bookshelfHandlers from "./handlers/bookshelf";
 import * as contentHandlers from "./handlers/content";
-import * as epubPdfTxtHandlers from "./handlers/epub-pdf-txt";
+import * as epubHandlers from "./handlers/epub";
+import * as pdfHandlers from "./handlers/pdf";
+import * as txtHandlers from "./handlers/txt";
 import * as webdavHandlers from "./handlers/webdav";
 import { handleRequest } from "./router";
 
@@ -53,16 +55,20 @@ const {
   handleEpubRead,
   handleEpubStatus,
   handleEpubAsset,
+} = epubHandlers;
+
+const {
   handlePdfUpload,
   handlePdfStream,
   handlePdfInfo,
   handlePdfToc,
+} = pdfHandlers;
+
+const {
   handleTxtUpload,
   handleTxtRead,
   handleTxtInfo,
-  handleUploadFile,
-  handleDeleteFile,
-} = epubPdfTxtHandlers;
+} = txtHandlers;
 
 const {
   handleWebdav,
@@ -356,4 +362,6 @@ const handleSaveAiBookMemory: any = _stubHandler("handleSaveAiBookMemory");
 const handleDeleteAiBookMemory: any = _stubHandler("handleDeleteAiBookMemory");
 const handleAiProxy: any = _stubHandler("handleAiProxy");
 const handleAiProxyImage: any = _stubHandler("handleAiProxyImage");
+const handleUploadFile: any = _stubHandler("handleUploadFile");
+const handleDeleteFile: any = _stubHandler("handleDeleteFile");
 // === END STUBS ===
