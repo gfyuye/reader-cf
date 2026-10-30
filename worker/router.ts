@@ -3,6 +3,11 @@ import { Env } from "./types";
 import * as authHandlers from "./handlers/auth";
 import * as documentHandlers from "./handlers/document";
 import * as userAdminHandlers from "./handlers/user-admin";
+import * as bookSourceHandlers from "./handlers/book-source";
+import * as bookshelfHandlers from "./handlers/bookshelf";
+import * as contentHandlers from "./handlers/content";
+import * as webdavHandlers from "./handlers/webdav";
+import * as epubPdfTxtHandlers from "./handlers/epub-pdf-txt";
 
 export async function handleRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (request.method === "OPTIONS") {
@@ -45,6 +50,16 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
     if (path === "/reader3/getAiModelConfig") return documentHandlers.handleGetDocument(request, env, "ai-model-config.json");
     if (path === "/reader3/saveAiModelConfig" && request.method === "POST") return documentHandlers.handleSaveDocumentItem(request, env, "ai-model-config.json", ctx);
 
+    // Book Sources
+    if (path === "/reader3/getBookSources") return bookSourceHandlers.handleGetBookSources(request, env);
+    if (path === "/reader3/getBookSource" && request.method === "GET") return bookSourceHandlers.handleGetBookSource(request, env);
+    if (path === "/reader3/saveBookSource" && request.method === "POST") return bookSourceHandlers.handleSaveBookSource(request, env, ctx);
+    if (path === "/reader3/saveBookSources" && request.method === "POST") return bookSourceHandlers.handleSaveBookSources(request, env, ctx);
+    if (path === "/reader3/deleteBookSource" && request.method === "POST") return bookSourceHandlers.handleDeleteBookSource(request, env, ctx);
+    if (path === "/reader3/deleteBookSources" && request.method === "POST") return bookSourceHandlers.handleDeleteBookSources(request, env, ctx);
+    if (path === "/reader3/deleteAllBookSources" && request.method === "POST") return bookSourceHandlers.handleDeleteAllBookSources(request, env, ctx);
+    if (path === "/reader3/readRemoteSourceFile" && request.method === "GET") return bookSourceHandlers.handleReadRemoteSourceFile(request, env);
+
     // User Management
     if (path === "/reader3/changePassword" && request.method === "POST") return userAdminHandlers.handleChangePassword(request, env);
     if (path === "/reader3/getUserList") return userAdminHandlers.handleGetUserList(request, env);
@@ -52,6 +67,44 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
     if (path === "/reader3/updateUser" && request.method === "POST") return userAdminHandlers.handleUpdateUser(request, env);
     if (path === "/reader3/deleteUsers" && request.method === "POST") return userAdminHandlers.handleDeleteUsers(request, env);
     if (path === "/reader3/resetPassword" && request.method === "POST") return userAdminHandlers.handleResetPassword(request, env);
+
+    // Bookshelf
+    if (path === "/reader3/getBookshelf") return bookshelfHandlers.handleGetBookshelf(request, env);
+    if (path === "/reader3/saveBook" && request.method === "POST") return bookshelfHandlers.handleSaveBook(request, env, ctx);
+    if (path === "/reader3/saveBooks" && request.method === "POST") return bookshelfHandlers.handleSaveBooks(request, env, ctx);
+    if (path === "/reader3/deleteBook" && request.method === "POST") return bookshelfHandlers.handleDeleteBook(request, env, ctx);
+    if (path === "/reader3/deleteBooks" && request.method === "POST") return bookshelfHandlers.handleDeleteBooks(request, env, ctx);
+    if (path === "/reader3/saveBookProgress" && request.method === "POST") return bookshelfHandlers.handleSaveBookProgress(request, env, ctx);
+    if (path === "/reader3/setBookSource" && request.method === "POST") return bookshelfHandlers.handleSetBookSource(request, env);
+    if (path === "/reader3/saveBookGroupId" && request.method === "POST") return bookshelfHandlers.handleSaveBookGroupId(request, env, ctx);
+    if (path === "/reader3/getShelfBook" && request.method === "GET") return bookshelfHandlers.handleGetShelfBook(request, env);
+    if (path === "/reader3/getShelfBookWithCacheInfo" && request.method === "GET") return bookshelfHandlers.handleGetShelfBookWithCacheInfo(request, env);
+
+    // Content
+    if (path === "/reader3/getBookContent") return contentHandlers.handleGetBookContent(request, env);
+
+    // WebDAV
+    if (path === "/webdav" || path.startsWith("/webdav/")) {
+      return webdavHandlers.handleWebdav(request, env);
+    }
+    if (path === "/reader3/getWebdav") return webdavHandlers.handleGetRemoteWebdav(request, env);
+    if (path === "/reader3/saveWebdav" && request.method === "POST") return webdavHandlers.handleSaveRemoteWebdav(request, env);
+    if (path === "/reader3/testWebdav" && request.method === "POST") return webdavHandlers.handleTestRemoteWebdav(request, env);
+    if (path === "/reader3/syncWebdavNow" && request.method === "POST") return webdavHandlers.handleSyncRemoteWebdavNow(request, env);
+
+    // EPUB/PDF/TXT
+    if (path === "/reader3/epub" || path.startsWith("/reader3/epub/")) {
+      if ((epubPdfTxtHandlers as any).handleEpubRead) {
+        const url = new URL(request.url);
+        const bookId = url.searchParams.get("bookId") || path.split("/").pop() || "";
+        const index = parseInt(url.searchParams.get("index") || url.searchParams.get("page") || "0", 10);
+        return (epubPdfTxtHandlers as any).handleEpubRead(bookId, index, env);
+      }
+      return jsonResponse({error:'not impl'}, 500);
+    }
+    if (path === "/reader3/upload" && request.method === "POST") return epubPdfTxtHandlers.handleTxtUpload ? epubPdfTxtHandlers.handleTxtUpload(request, env, ctx) : jsonResponse({isSuccess:false,errorMsg:'not impl'});
+    if (path === "/reader3/uploadFile" && request.method === "POST") return epubPdfTxtHandlers.handleUploadFile ? epubPdfTxtHandlers.handleUploadFile(request, env, ctx) : jsonResponse({isSuccess:false,errorMsg:'not impl'});
+    if (path === "/reader3/deleteFile" && request.method === "POST") return epubPdfTxtHandlers.handleDeleteFile ? epubPdfTxtHandlers.handleDeleteFile(request, env, ctx) : jsonResponse({isSuccess:false,errorMsg:'not impl'});
 
     // Health check
     if (path === "/health") {
