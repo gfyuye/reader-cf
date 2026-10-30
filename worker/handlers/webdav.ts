@@ -675,7 +675,148 @@ export async function syncUserToRemoteWebdav(env: Env, username: string): Promis
   }
 }
 
-// === ZIP Creation Helpers for Worker ===
+export async function handleGetWebdavFileList(request: Request, env: Env): Promise<Response> {
+  try {
+    const userNs = await resolveUserNs(request, env);
+    if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+    const url = new URL(request.url);
+    const prefix = url.searchParams.get("prefix") || `webdav/${userNs}/`;
+    const cleanPrefix = prefix.replace(/^\/+/, "");
+
+    const listed = await env.BUCKET.list({ prefix: cleanPrefix });
+
+    const files = (listed.objects || []).map((obj) => ({
+      key: obj.key,
+      name: obj.key.split("/").pop() || "",
+      size: obj.size,
+      uploaded: obj.uploaded ? obj.uploaded.getTime() : 0,
+      httpMetadata: obj.httpMetadata,
+    }));
+
+    return jsonResponse({
+      isSuccess: true,
+      data: {
+        prefix: cleanPrefix,
+        truncated: listed.truncated,
+        cursor: (listed as any).cursor,
+        files,
+        count: files.length,
+      },
+    });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: err.message });
+  }
+}
+
+export async function handleGetWebdavFile(request: Request, env: Env): Promise<Response> {
+  try {
+    const userNs = await resolveUserNs(request, env);
+    if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+    const url = new URL(request.url);
+    const r2Key = url.searchParams.get("key") || url.searchParams.get("r2Key") || "";
+    if (!r2Key) {
+      return jsonResponse({ isSuccess: false, errorMsg: "缺少 key 参数" });
+    }
+
+    const obj = await env.BUCKET.get(r2Key);
+    if (!obj) {
+      return jsonResponse({ isSuccess: false, errorMsg: "文件不存在" });
+    }
+
+    const headers = new Headers(corsHeaders());
+    headers.set("Content-Type", obj.httpMetadata?.contentType || "application/octet-stream");
+    headers.set("Content-Length", obj.size.toString());
+
+    return new Response(obj.body, { status: 200, headers });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: err.message });
+  }
+}
+
+export async function handleUploadFileToWebdav(request: Request, env: Env): Promise<Response> {
+  try {
+    const userNs = await resolveUserNs(request, env);
+    if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+    const formData = await request.formData();
+    const file = formData.get("file") as unknown as File | null;
+    const path = formData.get("path") as string | null;
+    if (!file) {
+      return jsonResponse({ isSuccess: false, errorMsg: "缺少文件" });
+    }
+
+    const fileName = file.name || "upload";
+    const cleanPath = (path || `webdav/${userNs}/${fileName}`).replace(/^\/+/, "");
+    const r2Key = cleanPath.startsWith(`webdav/${userNs}/`) ? cleanPath : `webdav/${userNs}/${cleanPath}`;
+
+    const bodyBytes = new Uint8Array(await file.arrayBuffer());
+    await env.BUCKET.put(r2Key, bodyBytes, {
+      httpMetadata: { contentType: file.type || "application/octet-stream" },
+    });
+
+    return jsonResponse({
+      isSuccess: true,
+      data: { key: r2Key, name: fileName, size: bodyBytes.length },
+    });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: err.message });
+  }
+}
+
+export async function handleDeleteWebdavFile(request: Request, env: Env): Promise<Response> {
+  try {
+    const userNs = await resolveUserNs(request, env);
+    if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+    const body = await request.json<any>();
+    const r2Key = body.key || body.r2Key || "";
+    if (!r2Key) {
+      return jsonResponse({ isSuccess: false, errorMsg: "缺少 key 参数" });
+    }
+
+    await env.BUCKET.delete(r2Key);
+    return jsonResponse({ isSuccess: true, data: "删除成功" });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: err.message });
+  }
+}
+
+export async function handleDeleteWebdavFileList(request: Request, env: Env): Promise<Response> {
+  try {
+    const userNs = await resolveUserNs(request, env);
+    if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+    const body = await request.json<any[]>();
+    if (!Array.isArray(body)) {
+      return jsonResponse({ isSuccess: false, errorMsg: "格式错误，期待 key 数组" });
+    }
+
+    const deleted: string[] = [];
+    const errors: Array<{ key: string; error: string }> = [];
+
+    for (const key of body) {
+      try {
+        await env.BUCKET.delete(key);
+        deleted.push(key);
+      } catch (e: any) {
+        errors.push({ key, error: e.message });
+      }
+    }
+
+    return jsonResponse({
+      isSuccess: errors.length === 0,
+      data: { deleted, count: deleted.length, errors },
+    });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: err.message });
+  }
+}
+
+// ==========================================
+// ZIP Creation Helpers for Worker
+// ==========================================
 
 const CRC_TABLE = new Uint32Array(256);
 for (let i = 0; i < 256; i++) {

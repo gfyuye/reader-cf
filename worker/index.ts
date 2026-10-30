@@ -79,6 +79,11 @@ const {
   handleSaveRemoteWebdav,
   handleTestRemoteWebdav,
   handleSyncRemoteWebdavNow,
+  handleGetWebdavFileList,
+  handleGetWebdavFile,
+  handleUploadFileToWebdav,
+  handleDeleteWebdavFile,
+  handleDeleteWebdavFileList,
 } = webdavHandlers;
 
 const { handleGetRssArticles, handleGetRssContent } = rssHandlers;
@@ -297,11 +302,11 @@ export default {
 
       // 10. WebDAV Protocol & REST APIs (for Web & App)
       if (path.startsWith("/reader3/webdav")) return handleWebdav(request, env);
-      if (path === "/reader3/getWebdavFileList" && request.method === "GET") return handleGetWebdavFileList(request, env);
-      if (path === "/reader3/getWebdavFile" && request.method === "GET") return handleGetWebdavFile(request, env);
-      if (path === "/reader3/uploadFileToWebdav" && request.method === "POST") return handleUploadFileToWebdav(request, env);
-      if (path === "/reader3/deleteWebdavFile" && request.method === "POST") return handleDeleteWebdavFile(request, env);
-      if (path === "/reader3/deleteWebdavFileList" && request.method === "POST") return handleDeleteWebdavFileList(request, env);
+      if (path === "/reader3/getWebdavFileList" && request.method === "GET") return webdavHandlers.handleGetWebdavFileList(request, env);
+      if (path === "/reader3/getWebdavFile" && request.method === "GET") return webdavHandlers.handleGetWebdavFile(request, env);
+      if (path === "/reader3/uploadFileToWebdav" && request.method === "POST") return webdavHandlers.handleUploadFileToWebdav(request, env);
+      if (path === "/reader3/deleteWebdavFile" && request.method === "POST") return webdavHandlers.handleDeleteWebdavFile(request, env);
+      if (path === "/reader3/deleteWebdavFileList" && request.method === "POST") return webdavHandlers.handleDeleteWebdavFileList(request, env);
 
       // User Management
       if (path === "/reader3/changePassword" && request.method === "POST") return userAdminHandlers.handleChangePassword(request, env);
@@ -364,11 +369,6 @@ const handleGetShelfBook: any = _stubHandler("handleGetShelfBook");
 const handleGetBookInfo: any = _stubHandler("handleGetBookInfo");
 const handleGetChapterList: any = _stubHandler("handleGetChapterList");
 const handleSaveBookGroupId: any = _stubHandler("handleSaveBookGroupId");
-const handleGetWebdavFileList: any = _stubHandler("handleGetWebdavFileList");
-const handleGetWebdavFile: any = _stubHandler("handleGetWebdavFile");
-const handleUploadFileToWebdav: any = _stubHandler("handleUploadFileToWebdav");
-const handleDeleteWebdavFile: any = _stubHandler("handleDeleteWebdavFile");
-const handleDeleteWebdavFileList: any = _stubHandler("handleDeleteWebdavFileList");
 const handleUploadFile: any = _stubHandler("handleUploadFile");
 const handleDeleteFile: any = _stubHandler("handleDeleteFile");
 // === END STUBS ===
