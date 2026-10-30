@@ -25,6 +25,7 @@ import * as txtHandlers from "./handlers/txt";
 import * as rssHandlers from "./handlers/rss";
 import * as aiHandlers from "./handlers/ai";
 import * as assetHandlers from "./handlers/asset";
+import * as searchHandlers from "./handlers/search";
 import * as webdavHandlers from "./handlers/webdav";
 import { handleRequest } from "./router";
 
@@ -97,6 +98,12 @@ const {
 } = aiHandlers;
 
 const { handleGetAsset } = assetHandlers;
+
+const {
+  handleSearchBookMulti,
+  handleTestBookSources,
+  handleExploreBook,
+} = searchHandlers;
 
 /**
  * Cloudflare Worker Backend for reader-rust
@@ -184,13 +191,13 @@ export default {
 
       // Multi-Source Search (Client-Driven Chunking / Scheme 1)
       if (path === "/reader3/searchBookMulti" && request.method === "POST") {
-        return handleSearchBookMulti(request, env);
+        return searchHandlers.handleSearchBookMulti(request, env);
       }
       if (path === "/reader3/testBookSources" && request.method === "POST") {
-        return handleTestBookSources(request, env);
+        return searchHandlers.handleTestBookSources(request, env);
       }
       if (path === "/reader3/exploreBook" && request.method === "POST") {
-        return handleExploreBook(request, env);
+        return searchHandlers.handleExploreBook(request, env);
       }
 
       // 3. Bookshelf & Reading Progress (书架与进度 - D1)
@@ -362,9 +369,6 @@ export default {
 
 // === TEMP STUBS ===
 const _stubHandler = (name: string) => (..._args: any[]) => ({ isSuccess: false, errorMsg: name + ' not implemented' });
-const handleSearchBookMulti: any = _stubHandler("handleSearchBookMulti");
-const handleTestBookSources: any = _stubHandler("handleTestBookSources");
-const handleExploreBook: any = _stubHandler("handleExploreBook");
 const handleGetShelfBook: any = _stubHandler("handleGetShelfBook");
 const handleGetBookInfo: any = _stubHandler("handleGetBookInfo");
 const handleGetChapterList: any = _stubHandler("handleGetChapterList");
