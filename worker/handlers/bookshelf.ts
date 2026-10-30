@@ -201,17 +201,92 @@ export function getDynamicHeaders(source: any, targetUrl = ""): Record<string, s
 // ==========================================
 
 export async function handleSetBookSource(request: Request, env: Env): Promise<Response> {
-  return jsonResponse({ isSuccess: false, errorMsg: "not implemented" });
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+  const body = await request.json<any>();
+  const { bookUrl, bookSourceUrl } = body;
+  if (!bookUrl || !bookSourceUrl) {
+    return jsonResponse({ isSuccess: false, errorMsg: "缺少 bookUrl 或 bookSourceUrl" });
+  }
+
+  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+  const idx = shelf.findIndex((b) => b.bookUrl === bookUrl);
+  if (idx < 0) {
+    return jsonResponse({ isSuccess: false, errorMsg: "书架中未找到该书籍" });
+  }
+  shelf[idx] = { ...shelf[idx], bookSourceUrl, source: bookSourceUrl };
+  await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
+  return jsonResponse({ isSuccess: true, data: "书源已绑定" });
 }
 
 export async function handleSaveBookGroupId(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  return jsonResponse({ isSuccess: false, errorMsg: "not implemented" });
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+  const body = await request.json<any>();
+  const { bookUrl, groupId } = body;
+  if (!bookUrl || groupId === undefined) {
+    return jsonResponse({ isSuccess: false, errorMsg: "缺少 bookUrl 或 groupId" });
+  }
+
+  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+  const idx = shelf.findIndex((b) => b.bookUrl === bookUrl);
+  if (idx < 0) {
+    return jsonResponse({ isSuccess: false, errorMsg: "书架中未找到该书籍" });
+  }
+  shelf[idx] = { ...shelf[idx], groupId };
+  await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
+  triggerOnChangeSync(env, userNs, ctx);
+  return jsonResponse({ isSuccess: true, data: "分组 ID 已保存" });
 }
 
 export async function handleGetShelfBook(request: Request, env: Env): Promise<Response> {
-  return jsonResponse({ isSuccess: false, errorMsg: "not implemented" });
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+  const url = new URL(request.url);
+  const bookUrl = url.searchParams.get("bookUrl") || url.searchParams.get("url") || "";
+  if (!bookUrl) {
+    return jsonResponse({ isSuccess: false, errorMsg: "缺少 bookUrl" });
+  }
+
+  const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+  const book = shelf.find((b) => b.bookUrl === bookUrl || b.url === bookUrl);
+  if (!book) {
+    return jsonResponse({ isSuccess: false, errorMsg: "书架中未找到该书籍" });
+  }
+  return jsonResponse({ isSuccess: true, data: book });
 }
 
 export async function handleGetShelfBookWithCacheInfo(request: Request, env: Env): Promise<Response> {
-  return jsonResponse({ isSuccess: false, errorMsg: "not implemented" });
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+  const url = new URL(request.url);
+  const bookUrl = url.searchParams.get("bookUrl") || url.searchParams.get("url") || "";
+  if (!bookUrl) {
+    return jsonResponse({ isSuccess: false, errorMsg: "缺少 bookUrl" });
+  }
+
+  const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+  const book = shelf.find((b) => b.bookUrl === bookUrl || b.url === bookUrl);
+  if (!book) {
+    return jsonResponse({ isSuccess: false, errorMsg: "书架中未找到该书籍" });
+  }
+
+  // 构建缓存信息
+  const cacheInfo = {
+    bookUrl,
+    hasEpubCache: bookUrl.startsWith("local-epub:"),
+    hasTxtCache: bookUrl.startsWith("local-txt:"),
+    hasPdfCache: bookUrl.startsWith("local-pdf:"),
+    durChapterIndex: book.durChapterIndex ?? 0,
+    durChapterPos: book.durChapterPos ?? 0,
+    durChapterTitle: book.durChapterTitle ?? "",
+    durChapterTime: book.durChapterTime ?? 0,
+    totalChapterNum: book.totalChapterNum ?? 0,
+  };
+
+  return jsonResponse({ isSuccess: true, data: { ...book, cacheInfo } });
 }
