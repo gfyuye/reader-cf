@@ -292,7 +292,14 @@ async function loadFiles(path = '/') {
           toParent: true,
         }]
       : []
-    rows.push(...list.sort((a, b) => {
+    const files: EntryRow[] = (list || []).map((f: any) => ({
+      name: f.name,
+      size: f.size,
+      path: f.key,
+      lastModified: f.uploaded,
+      isDirectory: false,
+    }))
+    rows.push(...files.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
       return a.name.localeCompare(b.name)
     }))

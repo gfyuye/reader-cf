@@ -12,9 +12,9 @@ export interface WebdavFileEntry {
 }
 
 export function getWebdavFileList(path = '/') {
-  return http.get<WebdavFileEntry[]>('/getWebdavFileList', {
+  return http.get<{ files: WebdavFileEntry[]; prefix: string; count: number }>('/getWebdavFileList', {
     params: { path },
-  }).then((r) => r.data)
+  }).then((r) => r.data.files)
 }
 
 export function getWebdavFileText(path: string) {
