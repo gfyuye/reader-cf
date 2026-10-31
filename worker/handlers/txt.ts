@@ -6,7 +6,7 @@ import * as documentHandlers from "../handlers/document";
 import { triggerOnChangeSync } from "./webdav";
 import { fallbackFetchFromRemoteWebdav } from "./webdav";
 
-function decodeTxtBytes(bytes: Uint8Array): string {
+export function decodeTxtBytes(bytes: Uint8Array): string {
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     return new TextDecoder("utf-8").decode(bytes.subarray(3));
   }
@@ -21,7 +21,7 @@ function decodeTxtBytes(bytes: Uint8Array): string {
   }
 }
 
-function scanTxtChapterOffsets(text: string, utf8Bytes: Uint8Array): Array<{ title: string; offset: number; length: number }> {
+export function scanTxtChapterOffsets(text: string, utf8Bytes: Uint8Array): Array<{ title: string; offset: number; length: number }> {
   const regex = /^\s*(第[0-9一二三四五六七八九十百千万零两]+[章回节卷集幕篇部话段]|Chapter\s+\d+|序章|引子|楔子|尾声|番外)[^\r\n]*$/gm;
   const matches: Array<{ title: string; charIndex: number }> = [];
 

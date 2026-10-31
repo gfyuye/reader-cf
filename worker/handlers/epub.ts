@@ -730,7 +730,7 @@ export async function handleEpubAsset(request: Request, env: Env): Promise<Respo
   return new Response(imageBytes, { headers });
 }
 
-async function indexEpubIntoDatabase(
+export async function indexEpubIntoDatabase(
   env: Env,
   userNs: string,
   bookId: string,
