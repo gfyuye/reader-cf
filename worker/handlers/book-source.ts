@@ -10,11 +10,21 @@ export async function handleGetBookSources(request: Request, env: Env): Promise<
   const userNs = await resolveUserNs(request, env);
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
+  const url = new URL(request.url);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 200);
+  const offset = Math.max(parseInt(url.searchParams.get("offset") || "0", 10), 0);
+
   const rows = await env.DB.prepare(
-    `SELECT json FROM book_sources WHERE user_ns = ?1 ORDER BY updated_at DESC`
+    `SELECT json FROM book_sources WHERE user_ns = ?1 ORDER BY updated_at DESC LIMIT ?2 OFFSET ?3`
+  )
+    .bind(userNs, limit, offset)
+    .all<{ json: string }>();
+
+  const totalRow = await env.DB.prepare(
+    `SELECT count(*) as cnt FROM book_sources WHERE user_ns = ?1`
   )
     .bind(userNs)
-    .all<{ json: string }>();
+    .first<{ cnt: number }>();
 
   const list = (rows.results || []).map((r) => {
     try {
@@ -24,7 +34,14 @@ export async function handleGetBookSources(request: Request, env: Env): Promise<
     }
   }).filter(Boolean);
 
-  return jsonResponse({ isSuccess: true, data: list });
+  return jsonResponse({
+    isSuccess: true,
+    data: list,
+    total: totalRow?.cnt || 0,
+    count: list.length,
+    offset,
+    limit,
+  });
 }
 
 export async function handleGetBookSource(request: Request, env: Env): Promise<Response> {
