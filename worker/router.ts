@@ -122,7 +122,6 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
     // ==========================================
     // 8. EPUB Streaming & Indexing
     // ==========================================
-    if ((path === "/reader3/epub/upload" || path === "/reader3/uploadEpubBook") && request.method === "POST") return epubHandlers.handleEpubUpload(request, env);
     if (path === "/reader3/epub/read" && request.method === "GET") {
       const bookId = url.searchParams.get("bookId") || "";
       const pageIndex = parseInt(url.searchParams.get("page") || "0", 10);
@@ -138,7 +137,6 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
     // ==========================================
     // 9. PDF Streaming & TOC
     // ==========================================
-    if ((path === "/reader3/pdf/upload" || path === "/reader3/uploadPdfBook") && request.method === "POST") return pdfHandlers.handlePdfUpload(request, env);
     if (path === "/reader3/pdf/stream" && request.method === "GET") return pdfHandlers.handlePdfStream(request, env);
     if (path === "/reader3/pdf/info" && request.method === "GET") return pdfHandlers.handlePdfInfo(url.searchParams.get("bookId") || "", env);
     if (path === "/reader3/pdf/toc" && request.method === "GET") return pdfHandlers.handlePdfToc(url.searchParams.get("bookId") || "", env);
@@ -146,9 +144,6 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
     // ==========================================
     // 10. TXT Streaming & Heading Indexing
     // ==========================================
-    if ((path === "/reader3/txt/upload" || path === "/reader3/uploadLocalBook" || path === "/reader3/uploadTxtBook") && request.method === "POST") {
-      return txtHandlers.handleTxtUpload(request, env, ctx);
-    }
     if (path === "/reader3/txt/read" && request.method === "GET") {
       const bookId = url.searchParams.get("bookId") || "";
       const chapterIndex = parseInt(url.searchParams.get("index") || "0", 10);
