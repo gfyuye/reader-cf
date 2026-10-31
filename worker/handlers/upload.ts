@@ -73,3 +73,49 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   if (!path) return jsonResponse({ isSuccess: false, errorMsg: "缺少文件路径" });
   return jsonResponse({ isSuccess: true, data: { ok: true } });
 }
+
+export async function handleUploadFile(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+  const formData = await request.formData();
+  const file = formData.get("file") as unknown as File | null;
+  if (!file) return jsonResponse({ isSuccess: false, errorMsg: "缺少上传文件" });
+
+  const rawName = file.name || "file";
+  const baseName = rawName.split("/").pop()?.split("\\").pop() || "file";
+  const safeName = baseName.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/^\.+/, "") || "file";
+  const fileType = new URL(request.url).searchParams.get("fileType") || "images";
+  const safeFileType = /^[a-zA-Z0-9_-]+$/.test(fileType) ? fileType : "images";
+  const r2Key = `assets/${userNs}/${safeFileType}/${safeName}`;
+
+  await env.BUCKET.put(r2Key, await file.arrayBuffer(), {
+    httpMetadata: { contentType: file.type || "application/octet-stream" },
+  });
+
+  return jsonResponse({
+    isSuccess: true,
+    data: [`/assets/${userNs}/${safeFileType}/${safeName}`],
+  });
+}
+
+export async function handleDeleteFile(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+  const { url } = await request.json<{ url: string }>();
+  const prefix = `/assets/${userNs}/`;
+  if (!url || !url.startsWith(prefix) || url.includes("..") || url.includes("\\")) {
+    return jsonResponse({ isSuccess: false, errorMsg: "非法文件路径" });
+  }
+
+  const rel = url.substring(prefix.length);
+  const parts = rel.split("/").filter(Boolean);
+  if (parts.length === 0 || parts.some((p) => p === "." || p === "..")) {
+    return jsonResponse({ isSuccess: false, errorMsg: "非法文件路径" });
+  }
+
+  const r2Key = `assets/${userNs}/${parts.join("/")}`;
+  await env.BUCKET.delete(r2Key);
+  return jsonResponse({ isSuccess: true, data: "" });
+}

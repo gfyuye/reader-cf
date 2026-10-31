@@ -50,6 +50,10 @@ const {
   handleDeleteBook,
   handleDeleteBooks,
   handleSaveBookProgress,
+  handleGetShelfBook,
+  handleGetBookInfo,
+  handleGetChapterList,
+  handleSaveBookGroupId,
 } = bookshelfHandlers;
 
 const { handleGetBookContent } = contentHandlers;
@@ -303,8 +307,8 @@ export default {
       if (path === "/reader3/upload/complete" && request.method === "POST") return uploadHandlers.handleChunkedUploadComplete(request, env, ctx);
 
       // 10. Assets & Covers (R2)
-      if (path === "/reader3/uploadFile" && request.method === "POST") return handleUploadFile(request, env, ctx);
-      if (path === "/reader3/deleteFile" && request.method === "POST") return handleDeleteFile(request, env, ctx);
+      if (path === "/reader3/uploadFile" && request.method === "POST") return uploadHandlers.handleUploadFile(request, env);
+      if (path === "/reader3/deleteFile" && request.method === "POST") return uploadHandlers.handleDeleteFile(request, env);
       if (path.startsWith("/assets/") || path === "/reader3/cover") return assetHandlers.handleGetAsset(request, env);
 
       // 10. WebDAV Protocol & REST APIs (for Web & App)
@@ -366,13 +370,3 @@ export default {
 // ==========================================
 // 1. User Authentication & Sessions (D1)
 // ==========================================
-
-// === TEMP STUBS ===
-const _stubHandler = (name: string) => (..._args: any[]) => ({ isSuccess: false, errorMsg: name + ' not implemented' });
-const handleGetShelfBook: any = _stubHandler("handleGetShelfBook");
-const handleGetBookInfo: any = _stubHandler("handleGetBookInfo");
-const handleGetChapterList: any = _stubHandler("handleGetChapterList");
-const handleSaveBookGroupId: any = _stubHandler("handleSaveBookGroupId");
-const handleUploadFile: any = _stubHandler("handleUploadFile");
-const handleDeleteFile: any = _stubHandler("handleDeleteFile");
-// === END STUBS ===
