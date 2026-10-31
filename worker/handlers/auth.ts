@@ -70,6 +70,11 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
     // Clear rate limit attempts on successful login
     await env.DB.prepare(`DELETE FROM login_attempts WHERE identifier = ?1`).bind(rateLimitKey).run();
 
+    // Clean up expired sessions for this user
+    await env.DB.prepare(`DELETE FROM user_sessions WHERE username = ?1 AND expire_at < ?2`)
+      .bind(username, Math.floor(Date.now() / 1000))
+      .run();
+
     const token = `${Date.now()}_${randomString(16)}`;
     const expireAt = Math.floor(Date.now() / 1000) + 30 * 86400;
     await env.DB.prepare(
