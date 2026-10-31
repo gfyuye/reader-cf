@@ -21,8 +21,17 @@ export async function handleGetAsset(request: Request, env: Env): Promise<Respon
     }
 
     const userNs = await resolveUserNs(request, env);
-    if (userNs && !objectKey.startsWith(`${userNs}/`)) {
-      // Allow public assets or same-user assets
+    const isCover = path === "/reader3/cover";
+    if (userNs) {
+      // Authenticated users may access their own assets, or public covers
+      if (!objectKey.startsWith(`${userNs}/`) && !isCover) {
+        return new Response("Forbidden", { status: 403, headers: corsHeaders() });
+      }
+    } else {
+      // Anonymous access: only public covers allowed
+      if (!isCover) {
+        return new Response("Forbidden", { status: 403, headers: corsHeaders() });
+      }
     }
 
     const obj = await env.BUCKET.get(objectKey);

@@ -41,6 +41,10 @@ export async function handleExploreBook(request: Request, env: Env): Promise<Res
     targetUrl = `${source?.bookSourceUrl || ""}${targetUrl}`;
   }
 
+  if (!isSafeRemoteUrl(targetUrl)) {
+    return jsonResponse({ isSuccess: false, errorMsg: "禁止访问内网或本地地址 (SSRF 防御)" });
+  }
+
   let fetchHeaders: Record<string, string> = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
   };
@@ -419,6 +423,16 @@ export async function handleTestBookSources(request: Request, env: Env): Promise
         else testUrl = testUrl.split("@")[0].split(";")[0].split(",")[0];
 
         if (testUrl.startsWith("http")) {
+          if (!isSafeRemoteUrl(testUrl)) {
+            results.push({
+              bookSourceUrl: s.bookSourceUrl,
+              bookSourceName: s.bookSourceName,
+              status: "failed",
+              durationMs: Date.now() - t0,
+              error: "禁止访问内网或本地地址 (SSRF 防御)",
+            });
+            continue;
+          }
           const resp = await fetch(testUrl, {
             headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
             signal: AbortSignal.timeout(5000),

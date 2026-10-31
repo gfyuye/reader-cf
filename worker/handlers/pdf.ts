@@ -88,6 +88,9 @@ export async function handlePdfUpload(request: Request, env: Env): Promise<Respo
 }
 
 export async function handlePdfStream(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
   const url = new URL(request.url);
   const bookId = url.searchParams.get("bookId") || "";
 

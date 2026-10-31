@@ -683,6 +683,9 @@ export async function handleGetWebdavFileList(request: Request, env: Env): Promi
     const url = new URL(request.url);
     const prefix = url.searchParams.get("prefix") || `webdav/${userNs}/`;
     const cleanPrefix = prefix.replace(/^\/+/, "");
+    if (!cleanPrefix.startsWith(`webdav/${userNs}/`)) {
+      return jsonResponse({ isSuccess: false, errorMsg: "非法文件路径" });
+    }
 
     const listed = await env.BUCKET.list({ prefix: cleanPrefix });
 
@@ -718,6 +721,10 @@ export async function handleGetWebdavFile(request: Request, env: Env): Promise<R
     const r2Key = url.searchParams.get("key") || url.searchParams.get("r2Key") || "";
     if (!r2Key) {
       return jsonResponse({ isSuccess: false, errorMsg: "缺少 key 参数" });
+    }
+
+    if (!r2Key.startsWith(`webdav/${userNs}/`)) {
+      return jsonResponse({ isSuccess: false, errorMsg: "非法文件路径" });
     }
 
     const obj = await env.BUCKET.get(r2Key);
@@ -776,6 +783,10 @@ export async function handleDeleteWebdavFile(request: Request, env: Env): Promis
       return jsonResponse({ isSuccess: false, errorMsg: "缺少 key 参数" });
     }
 
+    if (!r2Key.startsWith(`webdav/${userNs}/`)) {
+      return jsonResponse({ isSuccess: false, errorMsg: "非法文件路径" });
+    }
+
     await env.BUCKET.delete(r2Key);
     return jsonResponse({ isSuccess: true, data: "删除成功" });
   } catch (err: any) {
@@ -797,6 +808,10 @@ export async function handleDeleteWebdavFileList(request: Request, env: Env): Pr
     const errors: Array<{ key: string; error: string }> = [];
 
     for (const key of body) {
+      if (typeof key !== "string" || !key.startsWith(`webdav/${userNs}/`)) {
+        errors.push({ key: String(key), error: "非法文件路径" });
+        continue;
+      }
       try {
         await env.BUCKET.delete(key);
         deleted.push(key);

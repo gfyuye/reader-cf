@@ -13,6 +13,26 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
     return jsonResponse({ isSuccess: false, errorMsg: "用户名和密码不能为空" });
   }
 
+  // Rate limiting: max 5 login attempts per 15 minutes per IP+username
+  const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+  const rateLimitKey = `${clientIp}:${username}`;
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS login_attempts (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       identifier TEXT NOT NULL,
+       attempted_at INTEGER NOT NULL
+     )`
+  ).run();
+  const fifteenMinAgo = Math.floor(Date.now() / 1000) - 15 * 60;
+  const recentAttempts = await env.DB.prepare(
+    `SELECT count(*) as cnt FROM login_attempts WHERE identifier = ?1 AND attempted_at > ?2`
+  )
+    .bind(rateLimitKey, fifteenMinAgo)
+    .first<{ cnt: number }>();
+  if ((recentAttempts?.cnt || 0) >= 5) {
+    return jsonResponse({ isSuccess: false, errorMsg: "登录尝试过于频繁，请稍后再试" });
+  }
+
   const existing = await env.DB.prepare(
     `SELECT username, password, salt, token, is_admin, enable_webdav, enable_local_store, enable_ai_model FROM users WHERE username = ?1`
   )
@@ -33,6 +53,11 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
       return jsonResponse({ isSuccess: false, errorMsg: "用户名已被占用" });
     }
     if (!(await verifyPassword(password, existing.salt, existing.password))) {
+      await env.DB.prepare(
+        `INSERT INTO login_attempts (identifier, attempted_at) VALUES (?1, ?2)`
+      )
+        .bind(rateLimitKey, Math.floor(Date.now() / 1000))
+        .run();
       return jsonResponse({ isSuccess: false, errorMsg: "密码错误" });
     }
     if (!existing.password.startsWith("$pbkdf2$")) {
@@ -41,6 +66,9 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
         .bind(rehashed, username)
         .run();
     }
+
+    // Clear rate limit attempts on successful login
+    await env.DB.prepare(`DELETE FROM login_attempts WHERE identifier = ?1`).bind(rateLimitKey).run();
 
     const token = `${Date.now()}_${randomString(16)}`;
     const expireAt = Math.floor(Date.now() / 1000) + 30 * 86400;

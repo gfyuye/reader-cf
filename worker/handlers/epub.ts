@@ -674,6 +674,9 @@ async function readZipEntryBytes(r2Key: string, entry: CentralDirEntry, env: Env
 }
 
 export async function handleEpubAsset(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return new Response("Unauthorized", { status: 401, headers: corsHeaders() });
+
   const url = new URL(request.url);
   const bookId = url.searchParams.get("bookId") || "";
   const rawPath = url.searchParams.get("path") || "";
