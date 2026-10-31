@@ -175,7 +175,7 @@ export async function handleGetUserInfo(request: Request, env: Env): Promise<Res
         enableAiModel: false,
         secure,
         secureKeyRequired: secure,
-        adminAuthorized: false,
+        adminAuthorized,
       },
     });
   }
@@ -195,7 +195,7 @@ export async function handleGetUserInfo(request: Request, env: Env): Promise<Res
         enableAiModel: false,
         secure,
         secureKeyRequired: secure,
-        adminAuthorized: false,
+        adminAuthorized,
       },
     });
   }
