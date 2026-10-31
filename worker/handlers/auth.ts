@@ -165,7 +165,19 @@ export async function handleGetUserInfo(request: Request, env: Env): Promise<Res
   const adminAuthorized = isAuthorizedAdmin(request, env);
   const secure = !!getEnv(env, "SECURE_KEY");
   if (!userNs) {
-    return jsonResponse({ isSuccess: true, data: null, secure, secureKeyRequired: secure, adminAuthorized });
+    return jsonResponse({
+      isSuccess: true,
+      data: {
+        username: null,
+        isAdmin: false,
+        enableWebdav: false,
+        enableLocalStore: false,
+        enableAiModel: false,
+        secure,
+        secureKeyRequired: secure,
+        adminAuthorized: false,
+      },
+    });
   }
   const row = await env.DB.prepare(
     `SELECT username, is_admin, enable_webdav, enable_local_store, enable_ai_model FROM users WHERE username = ?1`
@@ -173,7 +185,19 @@ export async function handleGetUserInfo(request: Request, env: Env): Promise<Res
     .bind(userNs)
     .first<any>();
   if (!row) {
-    return jsonResponse({ isSuccess: true, data: null, secure, secureKeyRequired: secure, adminAuthorized });
+    return jsonResponse({
+      isSuccess: true,
+      data: {
+        username: null,
+        isAdmin: false,
+        enableWebdav: false,
+        enableLocalStore: false,
+        enableAiModel: false,
+        secure,
+        secureKeyRequired: secure,
+        adminAuthorized: false,
+      },
+    });
   }
   return jsonResponse({
     isSuccess: true,
@@ -183,9 +207,9 @@ export async function handleGetUserInfo(request: Request, env: Env): Promise<Res
       enableWebdav: row.enable_webdav === 1,
       enableLocalStore: row.enable_local_store === 1,
       enableAiModel: row.enable_ai_model === 1,
+      secure,
+      secureKeyRequired: secure,
+      adminAuthorized,
     },
-    secure,
-    secureKeyRequired: secure,
-    adminAuthorized,
   });
 }
