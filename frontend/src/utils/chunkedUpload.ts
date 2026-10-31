@@ -76,7 +76,7 @@ export async function uploadFileChunked(options: ChunkUploadOptions): Promise<an
   }
 
   // 3. Complete multipart upload
-  const completeRes = await http.post('/upload/complete', {
+  const rawRes = await http.post('/upload/complete', {
     uploadId,
     key,
     parts: uploadedParts,
@@ -84,7 +84,8 @@ export async function uploadFileChunked(options: ChunkUploadOptions): Promise<an
     fileSize,
     target,
     path,
-  }).then((r) => r.data)
+  })
+  const completeRes = (rawRes as any)?.data?.data ?? (rawRes as any)?.data
 
   if (onProgress) {
     onProgress(100)
