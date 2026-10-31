@@ -31,9 +31,6 @@ async function handleChangePassword(request: Request, env: Env): Promise<Respons
 }
 
 async function handleGetUserList(request: Request, env: Env): Promise<Response> {
-  const userNs = await resolveUserNs(request, env);
-  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-
   if (!isAuthorizedAdmin(request, env)) {
     return jsonResponse({ isSuccess: false, errorMsg: "需要验证管理密码 (SecureKey)" });
   }
