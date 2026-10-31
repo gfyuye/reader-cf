@@ -1,17 +1,23 @@
-export function corsHeaders(): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": "*",
+export function corsHeaders(request?: Request): Record<string, string> {
+  const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, Range, X-User-NS, X-File-Name, X-Requested-With",
   };
+  if (request) {
+    const origin = request.headers.get("origin");
+    if (origin) {
+      headers["Access-Control-Allow-Origin"] = origin;
+    }
+  }
+  return headers;
 }
 
-export function jsonResponse(data: any, status: number = 200): Response {
+export function jsonResponse(data: any, status: number = 200, request?: Request): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       "Content-Type": "application/json",
-      ...corsHeaders(),
+      ...corsHeaders(request),
     },
   });
 }

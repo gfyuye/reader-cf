@@ -20,7 +20,7 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: corsHeaders(),
+      headers: corsHeaders(request),
     });
   }
 
