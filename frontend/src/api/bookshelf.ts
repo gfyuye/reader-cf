@@ -3,8 +3,6 @@ import type { Book, BookChapter, BookGroup } from '../types'
 import { appendAuthQueryParams } from '../utils/secureAccess'
 import { uploadFileChunked } from '../utils/chunkedUpload'
 
-const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024 // 10MB
-
 export function getBookshelf() {
   return http.get<Book[]>('/getBookshelf').then((r) => r.data)
 }
@@ -26,51 +24,15 @@ export function saveBooks(books: Partial<Book>[]) {
 }
 
 export function uploadTxtBook(file: File, onProgress?: (percent: number) => void) {
-  if (file.size > LARGE_FILE_THRESHOLD) {
-    return uploadFileChunked({ file, fileName: file.name, target: 'bookshelf', onProgress })
-  }
-  const formData = new FormData()
-  formData.append('file', file)
-  return http.post<Book>('/uploadTxtBook', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    onUploadProgress: (e) => {
-      if (onProgress && e.total) {
-        onProgress(Math.round((e.loaded * 100) / e.total))
-      }
-    },
-  }).then((r) => r.data)
+  return uploadFileChunked({ file, fileName: file.name, target: 'bookshelf', onProgress })
 }
 
 export function uploadEpubBook(file: File, onProgress?: (percent: number) => void) {
-  if (file.size > LARGE_FILE_THRESHOLD) {
-    return uploadFileChunked({ file, fileName: file.name, target: 'bookshelf', onProgress })
-  }
-  const formData = new FormData()
-  formData.append('file', file)
-  return http.post<Book>('/uploadEpubBook', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    onUploadProgress: (e) => {
-      if (onProgress && e.total) {
-        onProgress(Math.round((e.loaded * 100) / e.total))
-      }
-    },
-  }).then((r) => r.data)
+  return uploadFileChunked({ file, fileName: file.name, target: 'bookshelf', onProgress })
 }
 
 export function uploadPdfBook(file: File, onProgress?: (percent: number) => void) {
-  if (file.size > LARGE_FILE_THRESHOLD) {
-    return uploadFileChunked({ file, fileName: file.name, target: 'bookshelf', onProgress })
-  }
-  const formData = new FormData()
-  formData.append('file', file)
-  return http.post<Book>('/uploadPdfBook', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    onUploadProgress: (e) => {
-      if (onProgress && e.total) {
-        onProgress(Math.round((e.loaded * 100) / e.total))
-      }
-    },
-  }).then((r) => r.data)
+  return uploadFileChunked({ file, fileName: file.name, target: 'bookshelf', onProgress })
 }
 
 export function deleteBook(book: Partial<Book>) {
