@@ -74,10 +74,15 @@ export async function handleChunkedUploadComplete(request: Request, env: Env, ct
   const bodyBytes = fileObj ? new Uint8Array(await fileObj.arrayBuffer()) : new Uint8Array(0);
   const fileSize = bodyBytes.byteLength;
 
-  // WebDAV 目标：仅合并分片并返回，不做书籍解析
+  // WebDAV 目标：将文件从 uploads/ 临时路径移动到 webdav/ 正式路径，不做书籍解析
   if (target === 'webdav') {
+    const webdavKey = `webdav/${userNs}/${safeName}`;
+    const fileObj2 = await env.BUCKET.get(r2Key);
+    if (fileObj2) {
+      await env.BUCKET.put(webdavKey, fileObj2.body);
+    }
     await env.DB.prepare(`UPDATE chunked_uploads SET status = 'complete' WHERE upload_id = ?1`).bind(uploadId).run();
-    return jsonResponse({ isSuccess: true, data: { key: r2Key, name: fileName, size: fileSize } });
+    return jsonResponse({ isSuccess: true, data: { key: webdavKey, name: fileName, size: fileSize } });
   }
 
   let newBook: any;
