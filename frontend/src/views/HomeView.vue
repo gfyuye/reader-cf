@@ -236,6 +236,9 @@ async function handleLocalBookFileChange(event: Event) {
     }
     await shelfStore.fetchBooks()
     appStore.showToast(`已导入《${book.name}》`, 'success')
+    if (!book.bookUrl) {
+      throw new Error('缺少url：书籍上传完成但未返回有效书籍地址')
+    }
     await handleBookClick(book)
   } catch (e: unknown) {
     appStore.showToast((e as Error).message || '本地书导入失败', 'error')
