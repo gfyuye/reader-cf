@@ -1,5 +1,5 @@
 import { jsonResponse } from "../http";
-import { resolveUserNs } from "../auth";
+import { resolveUserNs, isAuthorizedAdmin } from "../auth";
 import { getEnv } from "../env";
 import { randomString } from "../utils";
 import { pbkdf2Hash, genSecurePassword, verifyPassword } from "../crypto";
@@ -162,8 +162,10 @@ export async function handleLogout(request: Request, env: Env): Promise<Response
 
 export async function handleGetUserInfo(request: Request, env: Env): Promise<Response> {
   const userNs = await resolveUserNs(request, env);
+  const adminAuthorized = isAuthorizedAdmin(request, env);
+  const secure = !!getEnv(env, "SECURE_KEY");
   if (!userNs) {
-    return jsonResponse({ isSuccess: true, data: null });
+    return jsonResponse({ isSuccess: true, data: null, secure, secureKeyRequired: secure, adminAuthorized });
   }
   const row = await env.DB.prepare(
     `SELECT username, is_admin, enable_webdav, enable_local_store, enable_ai_model FROM users WHERE username = ?1`
@@ -171,7 +173,7 @@ export async function handleGetUserInfo(request: Request, env: Env): Promise<Res
     .bind(userNs)
     .first<any>();
   if (!row) {
-    return jsonResponse({ isSuccess: true, data: null });
+    return jsonResponse({ isSuccess: true, data: null, secure, secureKeyRequired: secure, adminAuthorized });
   }
   return jsonResponse({
     isSuccess: true,
@@ -182,5 +184,8 @@ export async function handleGetUserInfo(request: Request, env: Env): Promise<Res
       enableLocalStore: row.enable_local_store === 1,
       enableAiModel: row.enable_ai_model === 1,
     },
+    secure,
+    secureKeyRequired: secure,
+    adminAuthorized,
   });
 }
