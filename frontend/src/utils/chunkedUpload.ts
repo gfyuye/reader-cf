@@ -30,6 +30,7 @@ export async function uploadFileChunked(options: ChunkUploadOptions): Promise<an
   }>('/upload/init', {
     fileName,
     fileSize,
+    totalParts: totalChunks,
     target,
     path,
   }).then((r) => r.data)
