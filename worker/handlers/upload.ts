@@ -74,6 +74,12 @@ export async function handleChunkedUploadComplete(request: Request, env: Env, ct
   const bodyBytes = fileObj ? new Uint8Array(await fileObj.arrayBuffer()) : new Uint8Array(0);
   const fileSize = bodyBytes.byteLength;
 
+  // WebDAV 目标：仅合并分片并返回，不做书籍解析
+  if (target === 'webdav') {
+    await env.DB.prepare(`UPDATE chunked_uploads SET status = 'complete' WHERE upload_id = ?1`).bind(uploadId).run();
+    return jsonResponse({ isSuccess: true, data: { key: r2Key, name: fileName, size: fileSize } });
+  }
+
   let newBook: any;
   if (lowerName.endsWith(".epub")) {
     const { title, author, totalChapters } = await indexEpubIntoDatabase(env, userNs, bookId, fileName, r2Key, fileSize);

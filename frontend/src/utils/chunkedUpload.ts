@@ -46,13 +46,15 @@ export async function uploadFileChunked(options: ChunkUploadOptions): Promise<an
     const partNumber = i + 1
 
     const chunkFormData = new FormData()
-    chunkFormData.append('chunk', chunk, `${fileName}.part${partNumber}`)
+    chunkFormData.append('uploadId', uploadId)
+    chunkFormData.append('partNumber', String(partNumber))
+    chunkFormData.append('file', chunk, `${fileName}.part${partNumber}`)
 
     const partRes = await http.post<{
       partNumber: number
       etag: string
     }>(
-      `/upload/part?uploadId=${encodeURIComponent(uploadId)}&key=${encodeURIComponent(key)}&partNumber=${partNumber}`,
+      `/upload/part`,
       chunkFormData,
       {
         headers: { 'Content-Type': 'multipart/form-data' },
