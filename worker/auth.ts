@@ -4,8 +4,10 @@ import { Env } from "./types";
 
 export function isAuthorizedAdmin(request: Request, env: Env): boolean {
   const configuredKey = getEnv(env, "SECURE_KEY");
+  console.log("DEBUG isAuthorizedAdmin: SECURE_KEY in env =", "SECURE_KEY" in env, "configuredKey =", JSON.stringify(configuredKey));
   if (!configuredKey) return false;
   const secureKey = request.headers.get("X-Secure-Key") || new URL(request.url).searchParams.get("secureKey");
+  console.log("DEBUG isAuthorizedAdmin: request secureKey =", JSON.stringify(secureKey), "match =", secureKey === configuredKey);
   return secureKey === configuredKey;
 }
 
