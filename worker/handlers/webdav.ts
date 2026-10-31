@@ -778,7 +778,7 @@ export async function handleDeleteWebdavFile(request: Request, env: Env): Promis
     if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
     const body = await request.json<any>();
-    const r2Key = body.key || body.r2Key || "";
+    const r2Key = body.key || body.r2Key || body.path || "";
     if (!r2Key) {
       return jsonResponse({ isSuccess: false, errorMsg: "缺少 key 参数" });
     }
@@ -799,15 +799,20 @@ export async function handleDeleteWebdavFileList(request: Request, env: Env): Pr
     const userNs = await resolveUserNs(request, env);
     if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
-    const body = await request.json<any[]>();
-    if (!Array.isArray(body)) {
+    const body = await request.json<any>();
+    let paths: string[] = [];
+    if (Array.isArray(body)) {
+      paths = body;
+    } else if (body && Array.isArray(body.path)) {
+      paths = body.path;
+    } else {
       return jsonResponse({ isSuccess: false, errorMsg: "格式错误，期待 key 数组" });
     }
 
     const deleted: string[] = [];
     const errors: Array<{ key: string; error: string }> = [];
 
-    for (const key of body) {
+    for (const key of paths) {
       if (typeof key !== "string" || !key.startsWith(`webdav/${userNs}/`)) {
         errors.push({ key: String(key), error: "非法文件路径" });
         continue;
