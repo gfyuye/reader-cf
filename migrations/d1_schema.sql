@@ -46,6 +46,14 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_user_sessions_expire_at ON user_sessions(expire_at);
 
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    identifier TEXT NOT NULL,
+    attempted_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_attempts_identifier_attempted ON login_attempts(identifier, attempted_at);
+
 CREATE TABLE IF NOT EXISTS json_documents (
     namespace TEXT NOT NULL,
     name TEXT NOT NULL,
