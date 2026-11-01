@@ -748,7 +748,7 @@ export async function handleUploadFileToWebdav(request: Request, env: Env): Prom
     if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
     const formData = await request.formData();
-    const file = formData.get("file") as unknown as File | null;
+    const file = (formData.get("file") || formData.get("file0")) as unknown as File | null;
     const path = formData.get("path") as string | null;
     if (!file) {
       return jsonResponse({ isSuccess: false, errorMsg: "缺少文件" });
