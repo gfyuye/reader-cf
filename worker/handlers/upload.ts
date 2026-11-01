@@ -21,6 +21,14 @@ export async function handleChunkedUploadInit(request: Request, env: Env): Promi
     r2Key = `webdav/${userNs}/book/${safeName}`;
   }
 
+  // 上传前检查 R2 是否已有同名文件，避免覆盖并产生碎片
+  try {
+    await env.BUCKET.head(r2Key);
+    return jsonResponse({ isSuccess: false, errorMsg: `文件已存在：《${safeName}》，请先删除或重命名` });
+  } catch {
+    // 文件不存在，继续上传
+  }
+
   let contentType = mimeType || "application/octet-stream";
   const lower = safeName.toLowerCase();
   if (lower.endsWith(".epub")) contentType = "application/epub+zip";
