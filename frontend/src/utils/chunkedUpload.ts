@@ -48,46 +48,66 @@ export async function uploadFileChunked(options: ChunkUploadOptions): Promise<an
     const chunkFormData = new FormData()
     chunkFormData.append('file', chunk, `${fileName}.part${partNumber}`)
 
-    const partRes = await http.post<{
-      partNumber: number
-      etag: string
-    }>(
-      `/upload/part?uploadId=${encodeURIComponent(uploadId)}&key=${encodeURIComponent(key)}&partNumber=${partNumber}`,
-      chunkFormData,
-      {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (e) => {
-          if (onProgress && e.total) {
-            const chunkPercent = e.loaded / e.total
-            const totalPercent = Math.min(99, Math.round(((i + chunkPercent) / totalChunks) * 100))
-            onProgress(totalPercent)
-          }
-        },
+    try {
+      const partRes = await http.post<{
+        partNumber: number
+        etag: string
+      }>(
+        `/upload/part?uploadId=${encodeURIComponent(uploadId)}&key=${encodeURIComponent(key)}&partNumber=${partNumber}`,
+        chunkFormData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (e) => {
+            if (onProgress && e.total) {
+              const chunkPercent = e.loaded / e.total
+              const totalPercent = Math.min(99, Math.round(((i + chunkPercent) / totalChunks) * 100))
+              onProgress(totalPercent)
+            }
+          },
+        }
+      ).then((r) => r.data)
+
+      uploadedParts.push(partRes)
+
+      if (onProgress) {
+        onProgress(Math.min(99, Math.round(((i + 1) / totalChunks) * 100)))
       }
-    ).then((r) => r.data)
-
-    uploadedParts.push(partRes)
-
-    if (onProgress) {
-      onProgress(Math.min(99, Math.round(((i + 1) / totalChunks) * 100)))
+    } catch (err) {
+      // 分片上传失败，取消整个 multipart upload，避免碎片残留
+      try {
+        await http.post('/upload/abort', { uploadId, key })
+      } catch {
+        // 忽略 abort 失败
+      }
+      throw err
     }
   }
 
   // 3. Complete multipart upload
-  const rawRes = await http.post('/upload/complete', {
-    uploadId,
-    key,
-    parts: uploadedParts,
-    fileName,
-    fileSize,
-    target,
-    path,
-  })
-  const completeRes = (rawRes as any)?.data?.data ?? (rawRes as any)?.data
+  try {
+    const rawRes = await http.post('/upload/complete', {
+      uploadId,
+      key,
+      parts: uploadedParts,
+      fileName,
+      fileSize,
+      target,
+      path,
+    })
+    const completeRes = (rawRes as any)?.data?.data ?? (rawRes as any)?.data
 
-  if (onProgress) {
-    onProgress(100)
+    if (onProgress) {
+      onProgress(100)
+    }
+
+    return completeRes
+  } catch (err) {
+    // 合并失败，取消整个 multipart upload，避免碎片残留
+    try {
+      await http.post('/upload/abort', { uploadId, key })
+    } catch {
+      // 忽略 abort 失败
+    }
+    throw err
   }
-
-  return completeRes
 }

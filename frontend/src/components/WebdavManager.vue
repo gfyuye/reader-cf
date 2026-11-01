@@ -297,7 +297,7 @@ async function loadFiles(path = '/') {
       size: f.size,
       path: f.key,
       lastModified: f.uploaded,
-      isDirectory: false,
+      isDirectory: f.isDirectory === true,
     }))
     rows.push(...files.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1

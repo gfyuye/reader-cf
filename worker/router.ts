@@ -160,6 +160,7 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
     if (path === "/reader3/upload/init" && request.method === "POST") return uploadHandlers.handleChunkedUploadInit(request, env);
     if (path === "/reader3/upload/part" && request.method === "POST") return uploadHandlers.handleChunkedUploadPart(request, env);
     if (path === "/reader3/upload/complete" && request.method === "POST") return uploadHandlers.handleChunkedUploadComplete(request, env, ctx);
+    if (path === "/reader3/upload/abort" && request.method === "POST") return uploadHandlers.handleChunkedUploadAbort(request, env);
     if (path === "/reader3/importWebdavBook" && request.method === "POST") {
       return importBookHandlers.handleImportWebdavBook(request, env, ctx);
     }

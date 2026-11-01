@@ -691,7 +691,7 @@ export async function handleGetWebdavFileList(request: Request, env: Env): Promi
       return jsonResponse({ isSuccess: false, errorMsg: "非法文件路径" });
     }
 
-    const listed = await env.BUCKET.list({ prefix: cleanPrefix });
+    const listed = await env.BUCKET.list({ prefix: cleanPrefix, delimiter: "/" });
 
     const files = (listed.objects || []).map((obj) => ({
       key: obj.key,
@@ -699,7 +699,20 @@ export async function handleGetWebdavFileList(request: Request, env: Env): Promi
       size: obj.size,
       uploaded: obj.uploaded ? obj.uploaded.getTime() : 0,
       httpMetadata: obj.httpMetadata,
+      isDirectory: false,
     }));
+
+    const directories = (listed.delimitedPrefixes || []).map((prefix: string) => {
+      const dirName = prefix.replace(cleanPrefix, "").replace(/\/$/, "").split("/")[0];
+      return {
+        key: cleanPrefix + dirName + "/",
+        name: dirName,
+        size: 0,
+        uploaded: 0,
+        httpMetadata: null,
+        isDirectory: true,
+      };
+    });
 
     return jsonResponse({
       isSuccess: true,
@@ -707,8 +720,8 @@ export async function handleGetWebdavFileList(request: Request, env: Env): Promi
         prefix: cleanPrefix,
         truncated: listed.truncated,
         cursor: (listed as any).cursor,
-        files,
-        count: files.length,
+        files: [...directories, ...files],
+        count: files.length + directories.length,
       },
     });
   } catch (err: any) {

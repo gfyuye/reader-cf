@@ -111,6 +111,23 @@ export async function handleChunkedUploadComplete(request: Request, env: Env, ct
   }
 }
 
+export async function handleChunkedUploadAbort(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+  const body = await request.json<any>();
+  const { uploadId, key } = body || {};
+  if (!uploadId || !key) {
+    return jsonResponse({ isSuccess: false, errorMsg: "缺少上传参数" });
+  }
+  try {
+    const mp = env.BUCKET.resumeMultipartUpload(key, uploadId);
+    await mp.abort();
+    return jsonResponse({ isSuccess: true, data: "" });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: err.message || "取消上传失败" });
+  }
+}
+
 export async function handleUploadFile(request: Request, env: Env): Promise<Response> {
   const userNs = await resolveUserNs(request, env);
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
