@@ -81,25 +81,55 @@ export async function handleChunkedUploadComplete(request: Request, env: Env, ct
     mergedBytes.set(chunk, offset);
     offset += chunk.length;
   }
-  await env.BUCKET.put(row.key, mergedBytes);
   const now = Math.floor(Date.now() / 1000);
   const safeName = fileName.replace(/[/\\?%*:|"<>]/g, "_");
-  const lowerName = safeName.toLowerCase();
-  const bookId = `${target}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   const r2Key = row.key;
-  const fileSize = mergedBytes.byteLength;
+  await env.BUCKET.put(r2Key, mergedBytes);
 
-  // WebDAV 目标：将合并后的文件从 uploads/ 临时路径复制到 webdav/ 正式路径，不做书籍解析
-  if (target === 'webdav') {
-    const webdavKey = `webdav/${userNs}/${safeName}`;
-    await env.BUCKET.put(webdavKey, mergedBytes);
-    await env.DB.prepare(`UPDATE chunked_uploads SET status = 'complete' WHERE upload_id = ?1`).bind(uploadId).run();
-    return jsonResponse({ isSuccess: true, data: { key: webdavKey, name: fileName, size: fileSize } });
+  // 上传阶段：只负责文件合并和存储到 WebDAV，不做书籍解析，不保存书架
+  // WebDAV 目标：将合并后的文件从 uploads/ 临时路径复制到 webdav/ 正式路径
+  const webdavKey = `webdav/${userNs}/${safeName}`;
+  await env.BUCKET.put(webdavKey, mergedBytes);
+  await env.DB.prepare(`UPDATE chunked_uploads SET status = 'complete' WHERE upload_id = ?1`).bind(uploadId).run();
+  return jsonResponse({ isSuccess: true, data: { key: webdavKey, name: fileName, size: totalSize } });
+}
+
+export async function handleImportWebdavBook(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+  const body = await request.json<any>();
+  const { path } = body || {};
+  if (!path) return jsonResponse({ isSuccess: false, errorMsg: "缺少文件路径" });
+
+  // 导入书架阶段：检查重名、转移文件、解析书籍、保存书架
+  const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+  const fileName = path.split("/").pop() || path;
+  const safeName = fileName.replace(/[/\\?%*:|"<>]/g, "_");
+  const lowerName = safeName.toLowerCase();
+
+  // 检查书架中是否已有同名的本地书籍
+  const existingIdx = shelf.findIndex((b) => b.name === fileName && (b.origin === "local-epub" || b.origin === "local-pdf" || b.origin === "local-txt"));
+  if (existingIdx >= 0) {
+    return jsonResponse({ isSuccess: false, errorMsg: `书架中已存在同名书籍《${fileName}》，请先删除或重命名` });
   }
 
+  // 将文件从 WebDAV 路径复制到 book 文件夹
+  const webdavKey = `webdav/${userNs}/${safeName}`;
+  const bookKey = `webdav/${userNs}/book/${safeName}`;
+  const fileObj = await env.BUCKET.get(webdavKey);
+  if (!fileObj) return jsonResponse({ isSuccess: false, errorMsg: "源文件不存在，请先上传" });
+  const bodyBytes = new Uint8Array(await fileObj.arrayBuffer());
+  const fileSize = bodyBytes.byteLength;
+  await env.BUCKET.put(bookKey, bodyBytes, {
+    httpMetadata: lowerName.endsWith(".epub") ? { contentType: "application/epub+zip" } : lowerName.endsWith(".pdf") ? { contentType: "application/pdf" } : { contentType: "text/plain; charset=utf-8" },
+  });
+
+  const now = Math.floor(Date.now() / 1000);
+  const bookId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   let newBook: any;
+
   if (lowerName.endsWith(".epub")) {
-    const { title, author, totalChapters } = await indexEpubIntoDatabase(env, userNs, bookId, fileName, r2Key, fileSize);
+    const { title, author, totalChapters } = await indexEpubIntoDatabase(env, userNs, bookId, fileName, bookKey, fileSize);
     const displayTitle = title || safeName.replace(/\.epub$/i, "");
     newBook = {
       name: displayTitle,
@@ -121,11 +151,11 @@ export async function handleChunkedUploadComplete(request: Request, env: Env, ct
        VALUES (?1, ?2, ?3, ?4, ?5, 'ready', ?6, ?6, ?7, ?8, ?9, ?10)
        ON CONFLICT(book_id) DO UPDATE SET status='ready', total_chapters=excluded.total_chapters, parsed_chapters=excluded.parsed_chapters, updated_at=excluded.updated_at`
     )
-      .bind(bookId, userNs, fileName, r2Key, fileSize, totalChapters, displayTitle, author || "未知作者", now, now)
+      .bind(bookId, userNs, fileName, bookKey, fileSize, totalChapters, displayTitle, author || "未知作者", now, now)
       .run();
   } else if (lowerName.endsWith(".pdf")) {
     const tailSize = Math.min(65536, fileSize);
-    const tailText = new TextDecoder().decode(mergedBytes.subarray(fileSize - tailSize));
+    const tailText = new TextDecoder().decode(bodyBytes.subarray(fileSize - tailSize));
     const countMatch = tailText.match(/\/Count\s+(\d+)/);
     const totalPages = countMatch ? parseInt(countMatch[1], 10) : 1;
     const titleMatch = tailText.match(/\/Title\s*\(([^)]+)\)/);
@@ -150,9 +180,9 @@ export async function handleChunkedUploadComplete(request: Request, env: Env, ct
     await env.DB.prepare(
       `INSERT INTO pdf_books (book_id, user_ns, file_name, r2_key, file_size, total_pages, title, author, status, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'ready', ?9, ?10)`
-    ).bind(bookId, userNs, fileName, r2Key, fileSize, totalPages, title, author, now, now).run();
+    ).bind(bookId, userNs, fileName, bookKey, fileSize, totalPages, title, author, now, now).run();
   } else if (lowerName.endsWith(".txt")) {
-    const text = decodeTxtBytes(mergedBytes);
+    const text = decodeTxtBytes(bodyBytes);
     const utf8Bytes = new TextEncoder().encode(text);
     const chapters = scanTxtChapterOffsets(text, utf8Bytes);
     const totalChapters = chapters.length;
@@ -179,7 +209,7 @@ export async function handleChunkedUploadComplete(request: Request, env: Env, ct
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '本地导入', 'ready', ?8, ?9)
        ON CONFLICT(book_id) DO UPDATE SET file_size=excluded.file_size, total_chapters=excluded.total_chapters, title=excluded.title, updated_at=excluded.updated_at`
     )
-      .bind(bookId, userNs, fileName, r2Key, fileSize, totalChapters, title, now, now)
+      .bind(bookId, userNs, fileName, bookKey, fileSize, totalChapters, title, now, now)
       .run();
     const stmts = chapters.map((ch, idx) =>
       env.DB.prepare(
@@ -196,29 +226,16 @@ export async function handleChunkedUploadComplete(request: Request, env: Env, ct
   }
 
   // 保存书架
-  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
-  const idx = shelf.findIndex(
-    (b) => b.bookUrl === newBook.bookUrl || (b.name === newBook.name && b.origin === newBook.origin)
-  );
-  if (idx >= 0) {
-    shelf[idx] = { ...shelf[idx], ...newBook, bookUrl: shelf[idx].bookUrl, durChapterTime: now };
+  const shelfIdx = shelf.findIndex((b) => b.bookUrl === newBook.bookUrl || (b.name === newBook.name && b.origin === newBook.origin));
+  if (shelfIdx >= 0) {
+    shelf[shelfIdx] = { ...shelf[shelfIdx], ...newBook, bookUrl: shelf[shelfIdx].bookUrl, durChapterTime: now };
   } else {
     shelf.unshift(newBook);
   }
   await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
   triggerOnChangeSync(env, userNs, ctx);
 
-  await env.DB.prepare(`UPDATE chunked_uploads SET status = 'complete' WHERE upload_id = ?1`).bind(uploadId).run();
   return jsonResponse({ isSuccess: true, data: newBook });
-}
-
-export async function handleImportWebdavBook(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  const userNs = await resolveUserNs(request, env);
-  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-  const body = await request.json<any>();
-  const { path } = body || {};
-  if (!path) return jsonResponse({ isSuccess: false, errorMsg: "缺少文件路径" });
-  return jsonResponse({ isSuccess: true, data: { ok: true } });
 }
 
 export async function handleUploadFile(request: Request, env: Env): Promise<Response> {

@@ -23,16 +23,52 @@ export function saveBooks(books: Partial<Book>[]) {
   return http.post<Book[]>('/saveBooks', books).then((r) => r.data)
 }
 
+import http from './http'
+import type { Book, BookChapter, BookGroup } from '../types'
+import { appendAuthQueryParams } from '../utils/secureAccess'
+import { uploadFileChunked } from '../utils/chunkedUpload'
+import { importWebdavBook } from './webdav'
+
+export function getBookshelf() {
+  return http.get<Book[]>('/getBookshelf').then((r) => r.data)
+}
+
+export function getBookshelfWithCacheInfo() {
+  return http.get<Book[]>('/getShelfBookWithCacheInfo').then((r) => r.data)
+}
+
+export function getShelfBook(url: string) {
+  return http.post<Book>('/getShelfBook', { url }).then((r) => r.data)
+}
+
+export function saveBook(book: Partial<Book>) {
+  return http.post<Book>('/saveBook', book).then((r) => r.data)
+}
+
+export function saveBooks(books: Partial<Book>[]) {
+  return http.post<Book[]>('/saveBooks', books).then((r) => r.data)
+}
+
+async function uploadAndImportBook(file: File, onProgress?: (percent: number) => void): Promise<Book> {
+  // 第一步：上传文件到 WebDAV（仅存储，不解析）
+  const uploadResult = await uploadFileChunked({ file, fileName: file.name, target: 'webdav', onProgress })
+  const filePath = uploadResult.key || uploadResult.name
+
+  // 第二步：导入书架（检查重名、转移文件、解析、保存书架）
+  const book = await importWebdavBook(filePath, file.name)
+  return book
+}
+
 export function uploadTxtBook(file: File, onProgress?: (percent: number) => void) {
-  return uploadFileChunked({ file, fileName: file.name, target: 'bookshelf', onProgress })
+  return uploadAndImportBook(file, onProgress)
 }
 
 export function uploadEpubBook(file: File, onProgress?: (percent: number) => void) {
-  return uploadFileChunked({ file, fileName: file.name, target: 'bookshelf', onProgress })
+  return uploadAndImportBook(file, onProgress)
 }
 
 export function uploadPdfBook(file: File, onProgress?: (percent: number) => void) {
-  return uploadFileChunked({ file, fileName: file.name, target: 'bookshelf', onProgress })
+  return uploadAndImportBook(file, onProgress)
 }
 
 export function deleteBook(book: Partial<Book>) {
