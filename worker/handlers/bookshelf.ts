@@ -206,8 +206,8 @@ export async function handleSetBookSource(request: Request, env: Env): Promise<R
 
   const body = await request.json<any>();
   const { bookUrl, bookSourceUrl } = body;
-  if (!bookUrl || !bookSourceUrl) {
-    return jsonResponse({ isSuccess: false, errorMsg: "缺少 bookUrl 或 bookSourceUrl" });
+    if (!bookUrl || !bookSourceUrl) {
+    return jsonResponse({ isSuccess: false, errorMsg: "缺少bookurl 1" });
   }
 
   let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
@@ -227,7 +227,7 @@ export async function handleSaveBookGroupId(request: Request, env: Env, ctx: Exe
   const body = await request.json<any>();
   const { bookUrl, groupId } = body;
   if (!bookUrl || groupId === undefined) {
-    return jsonResponse({ isSuccess: false, errorMsg: "缺少 bookUrl 或 groupId" });
+    return jsonResponse({ isSuccess: false, errorMsg: "缺少bookurl 2" });
   }
 
   let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
@@ -248,7 +248,7 @@ export async function handleGetShelfBook(request: Request, env: Env): Promise<Re
   const url = new URL(request.url);
   const bookUrl = url.searchParams.get("bookUrl") || url.searchParams.get("url") || "";
   if (!bookUrl) {
-    return jsonResponse({ isSuccess: false, errorMsg: "缺少 bookUrl" });
+    return jsonResponse({ isSuccess: false, errorMsg: "缺少bookurl 3" });
   }
 
   const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
@@ -266,7 +266,7 @@ export async function handleGetShelfBookWithCacheInfo(request: Request, env: Env
   const url = new URL(request.url);
   const bookUrl = url.searchParams.get("bookUrl") || url.searchParams.get("url") || "";
   if (!bookUrl) {
-    return jsonResponse({ isSuccess: false, errorMsg: "缺少 bookUrl" });
+    return jsonResponse({ isSuccess: false, errorMsg: "缺少bookurl 4" });
   }
 
   const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
