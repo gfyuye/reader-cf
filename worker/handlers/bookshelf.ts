@@ -265,17 +265,34 @@ export async function handleGetShelfBookWithCacheInfo(request: Request, env: Env
 
   const url = new URL(request.url);
   const bookUrl = url.searchParams.get("bookUrl") || url.searchParams.get("url") || "";
-  if (!bookUrl) {
-    return jsonResponse({ isSuccess: false, errorMsg: "缺少bookurl 4" });
-  }
 
   const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+
+  // 如果没有指定 bookUrl，返回全部书架书籍的缓存信息列表（供 fetchBooks 使用）
+  if (!bookUrl) {
+    const list = shelf.map((b) => ({
+      ...b,
+      cacheInfo: {
+        bookUrl: b.bookUrl || b.url || "",
+        hasEpubCache: (b.bookUrl || b.url || "").startsWith("local-epub:"),
+        hasTxtCache: (b.bookUrl || b.url || "").startsWith("local-txt:"),
+        hasPdfCache: (b.bookUrl || b.url || "").startsWith("local-pdf:"),
+        durChapterIndex: b.durChapterIndex ?? 0,
+        durChapterPos: b.durChapterPos ?? 0,
+        durChapterTitle: b.durChapterTitle ?? "",
+        durChapterTime: b.durChapterTime ?? 0,
+        totalChapterNum: b.totalChapterNum ?? 0,
+      },
+    }));
+    return jsonResponse({ isSuccess: true, data: list });
+  }
+
   const book = shelf.find((b) => b.bookUrl === bookUrl || b.url === bookUrl);
   if (!book) {
     return jsonResponse({ isSuccess: false, errorMsg: "书架中未找到该书籍" });
   }
 
-  // 构建缓存信息
+  // 构建单本书缓存信息
   const cacheInfo = {
     bookUrl,
     hasEpubCache: bookUrl.startsWith("local-epub:"),
