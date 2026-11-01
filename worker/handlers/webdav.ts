@@ -681,8 +681,12 @@ export async function handleGetWebdavFileList(request: Request, env: Env): Promi
     if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
     const url = new URL(request.url);
-    const prefix = url.searchParams.get("prefix") || `webdav/${userNs}/`;
-    const cleanPrefix = prefix.replace(/^\/+/, "");
+    let prefix = url.searchParams.get("prefix") || url.searchParams.get("path") || `webdav/${userNs}/`;
+    prefix = prefix.replace(/^\/+/, "");
+    if (!prefix || prefix === "/") {
+      prefix = `webdav/${userNs}/`;
+    }
+    const cleanPrefix = prefix;
     if (!cleanPrefix.startsWith(`webdav/${userNs}/`)) {
       return jsonResponse({ isSuccess: false, errorMsg: "非法文件路径" });
     }

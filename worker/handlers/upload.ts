@@ -133,16 +133,17 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
     return jsonResponse({ isSuccess: false, errorMsg: `书架中已存在同名书籍《${fileName}》，请先删除或重命名` });
   }
 
-  // 将文件从 WebDAV 路径复制到 book 文件夹
-  const webdavKey = `webdav/${userNs}/${safeName}`;
+  // 将文件从 WebDAV 路径移动到 book 文件夹
+  const sourceKey = path.startsWith(`webdav/${userNs}/`) ? path : `webdav/${userNs}/${safeName}`;
   const bookKey = `webdav/${userNs}/book/${safeName}`;
-  const fileObj = await env.BUCKET.get(webdavKey);
+  const fileObj = await env.BUCKET.get(sourceKey);
   if (!fileObj) return jsonResponse({ isSuccess: false, errorMsg: "源文件不存在，请先上传" });
   const bodyBytes = new Uint8Array(await fileObj.arrayBuffer());
   const fileSize = bodyBytes.byteLength;
   await env.BUCKET.put(bookKey, bodyBytes, {
     httpMetadata: lowerName.endsWith(".epub") ? { contentType: "application/epub+zip" } : lowerName.endsWith(".pdf") ? { contentType: "application/pdf" } : { contentType: "text/plain; charset=utf-8" },
   });
+  await env.BUCKET.delete(sourceKey);
 
   const now = Math.floor(Date.now() / 1000);
   const bookId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
