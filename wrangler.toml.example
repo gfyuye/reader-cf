@@ -36,7 +36,3 @@ D1_DATABASE_ID = ""
 R2_BUCKET_NAME = "reader-storage"
 STORAGE_BACKEND = "r2"
 DATABASE_BACKEND = "d1"
-
-# Cron 触发器：每天凌晨 3 点清理 R2 中未完成的 multipart upload 碎片
-# 在 Cloudflare Pages 控制台 [Settings -> Functions -> Cron Triggers] 配置，
-# 或在 wrangler.toml 中添加 [triggers] crons = ["0 3 * * *"]
