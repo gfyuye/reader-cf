@@ -26,6 +26,13 @@ export function saveBooks(books: Partial<Book>[]) {
 import { importWebdavBook } from './webdav'
 
 async function uploadAndImportBook(file: File, onProgress?: (percent: number) => void): Promise<Book> {
+  // 上传前检查书架重名，避免无效上传产生 R2 碎片
+  const shelf = await getBookshelfWithCacheInfo().catch(() => [])
+  const existing = shelf.find((b) => b.name === file.name && (b.origin === 'local-epub' || b.origin === 'local-pdf' || b.origin === 'local-txt'))
+  if (existing) {
+    throw new Error(`书架中已存在同名书籍《${file.name}》，请先删除或重命名`)
+  }
+
   // 第一步：上传文件到 WebDAV（仅存储，不解析）
   const uploadResult = await uploadFileChunked({ file, fileName: file.name, target: 'webdav', onProgress })
   const filePath = uploadResult.key || uploadResult.name
