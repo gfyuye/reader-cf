@@ -1,5 +1,6 @@
 import { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./types";
 import { handleRequest } from "./router";
+import { cleanupStaleMultipartUploads } from "./handlers/cleanup";
 
 export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./types";
 
@@ -9,7 +10,7 @@ export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./type
  *
  * 路由模块：
  * - auth, document, user-admin, book-source, bookshelf, content, epub, pdf, txt
- *   rss, ai, asset, search, upload, webdav
+ *   rss, ai, asset, search, upload, webdav, cleanup
  *
  * 职责：仅负责请求入口分发，具体路由处理见 worker/router.ts。
  */
@@ -17,5 +18,10 @@ export type { Env, EpubQueueMessage, CentralDirEntry, EpubTocItem } from "./type
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     return handleRequest(request, env, ctx);
+  },
+
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    const { aborted, errors } = await cleanupStaleMultipartUploads(env);
+    console.log(`Cleanup stale multipart uploads: aborted=${aborted}, errors=${errors}`);
   },
 };
