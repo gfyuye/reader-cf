@@ -1,6 +1,5 @@
 import { jsonResponse } from "../http";
 import { resolveUserNs } from "../auth";
-import { randomString } from "../utils";
 import { Env } from "../types";
 import * as documentHandlers from "../handlers/document";
 import { indexEpubIntoDatabase } from "../handlers/epub";
@@ -11,87 +10,108 @@ export async function handleChunkedUploadInit(request: Request, env: Env): Promi
   const userNs = await resolveUserNs(request, env);
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
   const body = await request.json<any>();
-  const { fileName, fileSize, totalParts, mimeType } = body || {};
-  if (!fileName || !fileSize || !totalParts) {
+  const { fileName, fileSize, totalParts, mimeType, target, path } = body || {};
+  if (!fileName || !fileSize) {
     return jsonResponse({ isSuccess: false, errorMsg: "缺少上传参数" });
   }
-  const uploadId = randomString(16);
-  const now = Math.floor(Date.now() / 1000);
-  const key = `uploads/${userNs}/${uploadId}/${fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-  await env.DB.prepare(
-    `CREATE TABLE IF NOT EXISTS chunked_uploads (upload_id TEXT PRIMARY KEY, user_ns TEXT NOT NULL, file_name TEXT NOT NULL, file_size INTEGER NOT NULL, total_parts INTEGER NOT NULL, key TEXT NOT NULL, mime_type TEXT, status TEXT NOT NULL, created_at INTEGER NOT NULL)`
-  ).run();
-  await env.DB.prepare(
-    `INSERT INTO chunked_uploads (upload_id, user_ns, file_name, file_size, total_parts, key, mime_type, status, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'init', ?8)`
-  )
-    .bind(uploadId, userNs, fileName, fileSize, totalParts, key, mimeType || "", now)
-    .run();
-  return jsonResponse({ isSuccess: true, data: { uploadId, key } });
+  const cleanPath = (path || "/").replace(/^\/+/, "").replace(/\/$/, "");
+  const safeName = fileName.replace(/[/\\?%*:|"<>]/g, "_");
+
+  let r2Key = "";
+  if (target === "webdav") {
+    r2Key = cleanPath ? `webdav/${userNs}/${cleanPath}/${safeName}` : `webdav/${userNs}/${safeName}`;
+  } else {
+    r2Key = `webdav/${userNs}/book/${safeName}`;
+  }
+
+  let contentType = mimeType || "application/octet-stream";
+  const lower = safeName.toLowerCase();
+  if (lower.endsWith(".epub")) contentType = "application/epub+zip";
+  else if (lower.endsWith(".txt")) contentType = "text/plain; charset=utf-8";
+  else if (lower.endsWith(".pdf")) contentType = "application/pdf";
+
+  try {
+    const mp = await env.BUCKET.createMultipartUpload(r2Key, {
+      httpMetadata: { contentType },
+    });
+    return jsonResponse({
+      isSuccess: true,
+      data: {
+        uploadId: mp.uploadId,
+        key: mp.key,
+        chunkSize: 10 * 1024 * 1024,
+      },
+    });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: err.message || "初始化分片上传失败" });
+  }
 }
 
 export async function handleChunkedUploadPart(request: Request, env: Env): Promise<Response> {
   const userNs = await resolveUserNs(request, env);
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
-  const formData = await request.formData();
-  const uploadId = formData.get("uploadId") as string;
-  const partNumber = parseInt(formData.get("partNumber") as string, 10);
-  const file = formData.get("file") as unknown as File;
-  if (!uploadId || !partNumber || !file) {
-    return jsonResponse({ isSuccess: false, errorMsg: "缺少分片参数" });
+
+  const url = new URL(request.url);
+  const uploadId = url.searchParams.get("uploadId") || request.headers.get("X-Upload-Id") || "";
+  const key = url.searchParams.get("key") || request.headers.get("X-Key") || "";
+  const partNumberStr = url.searchParams.get("partNumber") || request.headers.get("X-Part-Number") || "1";
+  const partNumber = parseInt(partNumberStr, 10);
+
+  if (!uploadId || !key || isNaN(partNumber) || partNumber < 1) {
+    return jsonResponse({ isSuccess: false, errorMsg: "分片参数缺失" });
   }
-  const row = await env.DB.prepare(`SELECT * FROM chunked_uploads WHERE upload_id = ?1 AND user_ns = ?2`)
-    .bind(uploadId, userNs)
-    .first<any>();
-  if (!row) return jsonResponse({ isSuccess: false, errorMsg: "上传任务不存在" });
-  const partKey = `${row.key}.part${partNumber}`;
-  await env.BUCKET.put(partKey, file.stream());
-  return jsonResponse({ isSuccess: true, data: { partNumber } });
+
+  let partBytes: Uint8Array;
+  const contentType = request.headers.get("Content-Type") || "";
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await request.formData();
+    const fileEntry = formData.get("file");
+    const file = fileEntry as unknown as File;
+    if (!file || !(file instanceof File)) return jsonResponse({ isSuccess: false, errorMsg: "缺少分片数据" });
+    partBytes = new Uint8Array(await file.arrayBuffer());
+  } else {
+    partBytes = new Uint8Array(await request.arrayBuffer());
+  }
+
+  try {
+    const mp = env.BUCKET.resumeMultipartUpload(key, uploadId);
+    const uploaded = await mp.uploadPart(partNumber, partBytes);
+    return jsonResponse({
+      isSuccess: true,
+      data: {
+        partNumber,
+        etag: uploaded.etag,
+      },
+    });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: err.message || "上传分片失败" });
+  }
 }
 
 export async function handleChunkedUploadComplete(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const userNs = await resolveUserNs(request, env);
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
   const body = await request.json<any>();
-  const { uploadId, fileName, target, path } = body || {};
-  if (!uploadId) return jsonResponse({ isSuccess: false, errorMsg: "缺少 uploadId" });
-  const row = await env.DB.prepare(`SELECT * FROM chunked_uploads WHERE upload_id = ?1 AND user_ns = ?2`)
-    .bind(uploadId, userNs)
-    .first<any>();
-  if (!row) return jsonResponse({ isSuccess: false, errorMsg: "上传任务不存在" });
-  // 合并所有分片：按 partNumber 顺序读取并合并成完整文件
-  const totalParts = row.total_parts || 1;
-  const chunks: Uint8Array[] = [];
-  let totalSize = 0;
-  for (let i = 1; i <= totalParts; i++) {
-    const partKey = `${row.key}.part${i}`;
-    const partObj = await env.BUCKET.get(partKey);
-    if (partObj) {
-      const partBytes = new Uint8Array(await partObj.arrayBuffer());
-      chunks.push(partBytes);
-      totalSize += partBytes.length;
-    }
-  }
-  if (chunks.length === 0) {
-    return jsonResponse({ isSuccess: false, errorMsg: "未找到上传的分片数据" });
-  }
-  const mergedBytes = new Uint8Array(totalSize);
-  let offset = 0;
-  for (const chunk of chunks) {
-    mergedBytes.set(chunk, offset);
-    offset += chunk.length;
-  }
-  const now = Math.floor(Date.now() / 1000);
-  const safeName = fileName.replace(/[/\\?%*:|"<>]/g, "_");
-  const r2Key = row.key;
-  await env.BUCKET.put(r2Key, mergedBytes);
+  const { uploadId, key, parts, fileName, fileSize, target } = body;
 
-  // 上传阶段：只负责文件合并和存储到 WebDAV，不做书籍解析，不保存书架
-  // WebDAV 目标：将合并后的文件从 uploads/ 临时路径复制到 webdav/ 正式路径
-  const webdavKey = `webdav/${userNs}/${safeName}`;
-  await env.BUCKET.put(webdavKey, mergedBytes);
-  await env.DB.prepare(`UPDATE chunked_uploads SET status = 'complete' WHERE upload_id = ?1`).bind(uploadId).run();
-  return jsonResponse({ isSuccess: true, data: { key: webdavKey, name: fileName, size: totalSize } });
+  if (!uploadId || !key || !Array.isArray(parts)) {
+    return jsonResponse({ isSuccess: false, errorMsg: "参数缺失" });
+  }
+
+  try {
+    const mp = env.BUCKET.resumeMultipartUpload(key, uploadId);
+    await mp.complete(parts);
+
+    // 上传阶段：只负责文件合并和存储，不做书籍解析，不保存书架
+    // 所有书籍解析由 handleImportWebdavBook 独立完成
+    triggerOnChangeSync(env, userNs, ctx);
+    return jsonResponse({
+      isSuccess: true,
+      data: { key, name: fileName, size: fileSize },
+    });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: err.message || "合并分片失败" });
+  }
 }
 
 export async function handleImportWebdavBook(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
