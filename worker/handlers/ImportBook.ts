@@ -29,6 +29,13 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   // 将文件从 WebDAV 路径移动到 book 文件夹
   const sourceKey = path.startsWith(`webdav/${userNs}/`) ? path : `webdav/${userNs}/${safeName}`;
   const bookKey = `webdav/${userNs}/book/${safeName}`;
+
+  // 检查 book/ 目录下是否已有同名文件，避免覆盖
+  const existingBookObj = await env.BUCKET.get(bookKey);
+  if (existingBookObj) {
+    return jsonResponse({ isSuccess: false, errorMsg: `书籍已存在：《${safeName}》，请先删除或重命名` });
+  }
+
   const fileObj = await env.BUCKET.get(sourceKey);
   if (!fileObj) return jsonResponse({ isSuccess: false, errorMsg: "源文件不存在，请先上传" });
   const bodyBytes = new Uint8Array(await fileObj.arrayBuffer());
