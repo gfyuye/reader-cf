@@ -1,8 +1,6 @@
 import http from './http'
 import { uploadFileChunked } from '../utils/chunkedUpload'
 
-const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024 // 10MB
-
 export interface WebdavFileEntry {
   name: string
   size: number
@@ -37,53 +35,24 @@ export async function uploadFilesToWebdav(
   path = '/',
   onProgress?: (percent: number) => void
 ) {
-  const hasLargeFile = files.some((f) => f.file.size > LARGE_FILE_THRESHOLD)
-  if (hasLargeFile) {
-    const totalCount = files.length
-    for (let idx = 0; idx < totalCount; idx++) {
-      const item = files[idx]
-      if (item.file.size > LARGE_FILE_THRESHOLD) {
-        await uploadFileChunked({
-          file: item.file,
-          fileName: item.name,
-          target: 'webdav',
-          path,
-          onProgress: (p) => {
-            if (onProgress) {
-              const overall = Math.round(((idx + p / 100) / totalCount) * 100)
-              onProgress(Math.min(99, overall))
-            }
-          },
-        })
-      } else {
-        const formData = new FormData()
-        formData.append('path', path)
-        formData.append('file0', item.file, item.name)
-        await http.post<WebdavFileEntry[]>('/uploadFileToWebdav', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        })
-      }
-    }
-    if (onProgress) onProgress(100)
-    return []
+  const totalCount = files.length
+  for (let idx = 0; idx < totalCount; idx++) {
+    const item = files[idx]
+    await uploadFileChunked({
+      file: item.file,
+      fileName: item.name,
+      target: 'webdav',
+      path,
+      onProgress: (p) => {
+        if (onProgress) {
+          const overall = Math.round(((idx + p / 100) / totalCount) * 100)
+          onProgress(Math.min(99, overall))
+        }
+      },
+    })
   }
-
-  const formData = new FormData()
-  formData.append('path', path)
-  files.forEach((item, index) => {
-    formData.append(`file${index}`, item.file, item.name)
-  })
-  return http.post<WebdavFileEntry[]>('/uploadFileToWebdav', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-    onUploadProgress: (progressEvent) => {
-      if (onProgress && progressEvent.total) {
-        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
-        onProgress(percent)
-      }
-    },
-  }).then((r) => r.data)
+  if (onProgress) onProgress(100)
+  return []
 }
 
 export function importWebdavBook(path: string, name: string) {
