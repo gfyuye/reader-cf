@@ -59,28 +59,40 @@ export async function handleChunkedUploadComplete(request: Request, env: Env, ct
     .bind(uploadId, userNs)
     .first<any>();
   if (!row) return jsonResponse({ isSuccess: false, errorMsg: "上传任务不存在" });
-  // 合并分片：将首个分片复制为最终文件
-  const partKey = `${row.key}.part1`;
-  const part = await env.BUCKET.get(partKey);
-  if (part) {
-    await env.BUCKET.put(row.key, part.body);
+  // 合并所有分片：按 partNumber 顺序读取并合并成完整文件
+  const totalParts = row.total_parts || 1;
+  const chunks: Uint8Array[] = [];
+  let totalSize = 0;
+  for (let i = 1; i <= totalParts; i++) {
+    const partKey = `${row.key}.part${i}`;
+    const partObj = await env.BUCKET.get(partKey);
+    if (partObj) {
+      const partBytes = new Uint8Array(await partObj.arrayBuffer());
+      chunks.push(partBytes);
+      totalSize += partBytes.length;
+    }
   }
+  if (chunks.length === 0) {
+    return jsonResponse({ isSuccess: false, errorMsg: "未找到上传的分片数据" });
+  }
+  const mergedBytes = new Uint8Array(totalSize);
+  let offset = 0;
+  for (const chunk of chunks) {
+    mergedBytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  await env.BUCKET.put(row.key, mergedBytes);
   const now = Math.floor(Date.now() / 1000);
   const safeName = fileName.replace(/[/\\?%*:|"<>]/g, "_");
   const lowerName = safeName.toLowerCase();
   const bookId = `${target}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   const r2Key = row.key;
-  const fileObj = await env.BUCKET.get(r2Key);
-  const bodyBytes = fileObj ? new Uint8Array(await fileObj.arrayBuffer()) : new Uint8Array(0);
-  const fileSize = bodyBytes.byteLength;
+  const fileSize = mergedBytes.byteLength;
 
-  // WebDAV 目标：将文件从 uploads/ 临时路径移动到 webdav/ 正式路径，不做书籍解析
+  // WebDAV 目标：将合并后的文件从 uploads/ 临时路径复制到 webdav/ 正式路径，不做书籍解析
   if (target === 'webdav') {
     const webdavKey = `webdav/${userNs}/${safeName}`;
-    const fileObj2 = await env.BUCKET.get(r2Key);
-    if (fileObj2) {
-      await env.BUCKET.put(webdavKey, fileObj2.body);
-    }
+    await env.BUCKET.put(webdavKey, mergedBytes);
     await env.DB.prepare(`UPDATE chunked_uploads SET status = 'complete' WHERE upload_id = ?1`).bind(uploadId).run();
     return jsonResponse({ isSuccess: true, data: { key: webdavKey, name: fileName, size: fileSize } });
   }
@@ -113,7 +125,7 @@ export async function handleChunkedUploadComplete(request: Request, env: Env, ct
       .run();
   } else if (lowerName.endsWith(".pdf")) {
     const tailSize = Math.min(65536, fileSize);
-    const tailText = new TextDecoder().decode(bodyBytes.subarray(fileSize - tailSize));
+    const tailText = new TextDecoder().decode(mergedBytes.subarray(fileSize - tailSize));
     const countMatch = tailText.match(/\/Count\s+(\d+)/);
     const totalPages = countMatch ? parseInt(countMatch[1], 10) : 1;
     const titleMatch = tailText.match(/\/Title\s*\(([^)]+)\)/);
@@ -140,7 +152,7 @@ export async function handleChunkedUploadComplete(request: Request, env: Env, ct
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'ready', ?9, ?10)`
     ).bind(bookId, userNs, fileName, r2Key, fileSize, totalPages, title, author, now, now).run();
   } else if (lowerName.endsWith(".txt")) {
-    const text = decodeTxtBytes(bodyBytes);
+    const text = decodeTxtBytes(mergedBytes);
     const utf8Bytes = new TextEncoder().encode(text);
     const chapters = scanTxtChapterOffsets(text, utf8Bytes);
     const totalChapters = chapters.length;
