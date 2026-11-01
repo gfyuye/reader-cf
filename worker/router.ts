@@ -15,6 +15,7 @@ import * as assetHandlers from "./handlers/asset";
 import * as searchHandlers from "./handlers/search";
 import * as uploadHandlers from "./handlers/upload";
 import * as webdavHandlers from "./handlers/webdav";
+import * as importBookHandlers from "./handlers/ImportBook";
 
 export async function handleRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (request.method === "OPTIONS") {
@@ -160,7 +161,7 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
     if (path === "/reader3/upload/part" && request.method === "POST") return uploadHandlers.handleChunkedUploadPart(request, env);
     if (path === "/reader3/upload/complete" && request.method === "POST") return uploadHandlers.handleChunkedUploadComplete(request, env, ctx);
     if (path === "/reader3/importWebdavBook" && request.method === "POST") {
-      return uploadHandlers.handleImportWebdavBook(request, env, ctx);
+      return importBookHandlers.handleImportWebdavBook(request, env, ctx);
     }
     if (path === "/reader3/uploadFile" && request.method === "POST") return uploadHandlers.handleUploadFile(request, env);
     if (path === "/reader3/deleteFile" && request.method === "POST") return uploadHandlers.handleDeleteFile(request, env);

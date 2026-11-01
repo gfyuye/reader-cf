@@ -4,6 +4,35 @@ import { Env } from "../types";
 import * as documentHandlers from "../handlers/document";
 import { fallbackFetchFromRemoteWebdav } from "./webdav";
 
+export async function indexPdfIntoDatabase(
+  env: Env,
+  userNs: string,
+  bookId: string,
+  fileName: string,
+  r2Key: string,
+  fileSize: number,
+  bodyBytes: Uint8Array
+): Promise<{ title: string; author: string; totalPages: number }> {
+  const tailSize = Math.min(65536, fileSize);
+  const tailText = new TextDecoder().decode(bodyBytes.subarray(fileSize - tailSize));
+
+  const countMatch = tailText.match(/\/Count\s+(\d+)/);
+  const totalPages = countMatch ? parseInt(countMatch[1], 10) : 1;
+  const titleMatch = tailText.match(/\/Title\s*\(([^)]+)\)/);
+  const authorMatch = tailText.match(/\/Author\s*\(([^)]+)\)/);
+
+  const title = titleMatch ? titleMatch[1].trim() : fileName.replace(/\.pdf$/i, "");
+  const author = authorMatch ? authorMatch[1].trim() : "未知作者";
+  const now = Math.floor(Date.now() / 1000);
+
+  await env.DB.prepare(
+    `INSERT INTO pdf_books (book_id, user_ns, file_name, r2_key, file_size, total_pages, title, author, status, created_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'ready', ?9, ?10)`
+  ).bind(bookId, userNs, fileName, r2Key, fileSize, totalPages, title, author, now, now).run();
+
+  return { title, author, totalPages };
+}
+
 export async function handlePdfUpload(request: Request, env: Env): Promise<Response> {
   try {
     const userNs = await resolveUserNs(request, env);
