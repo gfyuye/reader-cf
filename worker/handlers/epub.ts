@@ -738,40 +738,61 @@ export async function indexEpubIntoDatabase(
   r2Key: string,
   fileSize: number
 ): Promise<{ title: string; author: string; totalChapters: number }> {
+  console.log(`[EpubIndex] start bookId=${bookId} r2Key=${r2Key} fileSize=${fileSize}`);
   const tailSize = Math.min(65536, fileSize);
   const tailObj = await env.BUCKET.get(r2Key, {
     range: { offset: fileSize - tailSize, length: tailSize },
   });
-  if (!tailObj) throw new Error("无法读取 R2 数据");
+  if (!tailObj) {
+    console.log(`[EpubIndex] tailObj not found bookId=${bookId}`);
+    throw new Error("无法读取 R2 数据");
+  }
 
   const tailBytes = new Uint8Array(await tailObj.arrayBuffer());
   const eocd = findEOCD(tailBytes, fileSize);
-  if (!eocd) throw new Error("未找到 EPUB EOCD 记录");
+  if (!eocd) {
+    console.log(`[EpubIndex] EOCD not found bookId=${bookId}`);
+    throw new Error("未找到 EPUB EOCD 记录");
+  }
 
   const cdObj = await env.BUCKET.get(r2Key, {
     range: { offset: eocd.cdOffset, length: eocd.cdSize },
   });
-  if (!cdObj) throw new Error("无法读取中央目录");
+  if (!cdObj) {
+    console.log(`[EpubIndex] central directory not found bookId=${bookId}`);
+    throw new Error("无法读取中央目录");
+  }
 
   const cdBytes = new Uint8Array(await cdObj.arrayBuffer());
   const entries = parseCentralDirectory(cdBytes);
   const entryMap = new Map(entries.map((e) => [e.fileName, e]));
 
   const containerEntry = entries.find((e) => e.fileName === "META-INF/container.xml");
-  if (!containerEntry) throw new Error("缺少 container.xml");
+  if (!containerEntry) {
+    console.log(`[EpubIndex] container.xml not found bookId=${bookId}`);
+    throw new Error("缺少 container.xml");
+  }
 
   const containerXml = await readZipEntryText(r2Key, containerEntry, env);
   const opfPath = parseContainerOpfPath(containerXml);
-  if (!opfPath) throw new Error("缺少 OPF 路径");
+  if (!opfPath) {
+    console.log(`[EpubIndex] opfPath not found bookId=${bookId}`);
+    throw new Error("缺少 OPF 路径");
+  }
 
   const opfEntry = entries.find(
     (e) => e.fileName === opfPath || e.fileName.endsWith("/" + (opfPath?.split("/").pop() || ""))
   );
-  if (!opfEntry) throw new Error(`缺少 OPF 文件: ${opfPath}`);
+  if (!opfEntry) {
+    console.log(`[EpubIndex] opfEntry not found bookId=${bookId} opfPath=${opfPath}`);
+    throw new Error(`缺少 OPF 文件: ${opfPath}`);
+  }
 
   const opfXml = await readZipEntryText(r2Key, opfEntry, env);
   const opfDir = opfPath.includes("/") ? opfPath.substring(0, opfPath.lastIndexOf("/")) : "";
   const { title, author, spinePaths, ncxPath, navPath } = parseOpfPackage(opfXml, opfDir);
+
+  console.log(`[EpubIndex] parsed bookId=${bookId} title=${title} author=${author} spinePaths=${spinePaths.length} ncxPath=${ncxPath} navPath=${navPath}`);
 
   let tocItems: EpubTocItem[] = [];
   const targetNcx = ncxPath || "toc.ncx";
@@ -796,6 +817,8 @@ export async function indexEpubIntoDatabase(
       } catch {}
     }
   }
+
+  console.log(`[EpubIndex] TOC items=${tocItems.length} bookId=${bookId}`);
 
   const now = Math.floor(Date.now() / 1000);
   const stmts = [];
@@ -869,9 +892,14 @@ export async function indexEpubIntoDatabase(
 
   for (let i = 0; i < stmts.length; i += 50) {
     await env.DB.batch(stmts.slice(i, i + 50));
+    if (i % 500 === 0) {
+      console.log(`[EpubIndex] inserted chapters ${i}/${stmts.length} bookId=${bookId}`);
+    }
   }
 
   const totalChapters = chapterIndex || spinePaths.length;
+
+  console.log(`[EpubIndex] inserting epub_books bookId=${bookId} totalChapters=${totalChapters}`);
 
   await env.DB.prepare(
     `INSERT INTO epub_books (book_id, user_ns, file_name, r2_key, file_size, status, total_chapters, parsed_chapters, title, author, created_at, updated_at)
@@ -880,6 +908,8 @@ export async function indexEpubIntoDatabase(
   )
     .bind(bookId, userNs, fileName, r2Key, fileSize, totalChapters, title, author, now, now)
     .run();
+
+  console.log(`[EpubIndex] done bookId=${bookId} totalChapters=${totalChapters}`);
 
   return { title, author, totalChapters };
 }

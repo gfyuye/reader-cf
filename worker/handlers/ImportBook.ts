@@ -14,11 +14,15 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   const { path } = body || {};
   if (!path) return jsonResponse({ isSuccess: false, errorMsg: "缺少文件路径" });
 
+  console.log(`[ImportBook] start path=${path}`);
+
   // 导入书架阶段：检查重名、转移文件、解析书籍、保存书架
   const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
   const fileName = path.split("/").pop() || path;
   const safeName = fileName.replace(/[/\\?%*:|"<>]/g, "_");
   const lowerName = safeName.toLowerCase();
+
+  console.log(`[ImportBook] userNs=${userNs} fileName=${fileName} safeName=${safeName} lowerName=${lowerName}`);
 
   // 检查书架中是否已有同名的本地书籍
   const existingIdx = shelf.findIndex((b) => b.name === fileName && (b.origin === "local-epub" || b.origin === "local-pdf" || b.origin === "local-txt"));
@@ -30,6 +34,8 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   const sourceKey = path.startsWith(`webdav/${userNs}/`) ? path : `webdav/${userNs}/${safeName}`;
   const bookKey = `webdav/${userNs}/book/${safeName}`;
 
+  console.log(`[ImportBook] sourceKey=${sourceKey} bookKey=${bookKey}`);
+
   // 检查 book/ 目录下是否已有同名文件，避免覆盖
   const existingBookObj = await env.BUCKET.get(bookKey);
   if (existingBookObj) {
@@ -40,6 +46,8 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   if (!fileObj) return jsonResponse({ isSuccess: false, errorMsg: "源文件不存在，请先上传" });
   const bodyBytes = new Uint8Array(await fileObj.arrayBuffer());
   const fileSize = bodyBytes.byteLength;
+
+  console.log(`[ImportBook] fileSize=${fileSize} sourceObj exists=true`);
   await env.BUCKET.put(bookKey, bodyBytes, {
     httpMetadata: lowerName.endsWith(".epub") ? { contentType: "application/epub+zip" } : lowerName.endsWith(".pdf") ? { contentType: "application/pdf" } : { contentType: "text/plain; charset=utf-8" },
   });
@@ -52,8 +60,10 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   let newBook: any;
 
   if (lowerName.endsWith(".epub")) {
+    console.log(`[ImportBook] epub parsing start bookId=${bookId}`);
     try {
       const { title, author, totalChapters } = await indexEpubIntoDatabase(env, userNs, bookId, fileName, bookKey, fileSize);
+      console.log(`[ImportBook] epub parsing end bookId=${bookId} title=${title} author=${author} totalChapters=${totalChapters}`);
       const displayTitle = title || safeName.replace(/\.epub$/i, "");
       newBook = {
         name: displayTitle,
@@ -78,6 +88,7 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
         .bind(bookId, userNs, fileName, bookKey, fileSize, totalChapters, displayTitle, author || "未知作者", now, now)
         .run();
     } catch (err: any) {
+      console.log(`[ImportBook] epub parsing error bookId=${bookId} err=${err.message || err}`);
       return jsonResponse({ isSuccess: false, errorMsg: `EPUB解析失败：${err.message || err}` });
     }
   } else if (lowerName.endsWith(".pdf")) {
