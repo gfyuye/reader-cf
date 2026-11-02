@@ -75,7 +75,7 @@ export const useAppStore = defineStore('app', () => {
       secureKeyRequired: secureKeyRequired.value,
       adminAuthorized: adminAuthorized.value,
     })
-    document.cookie = `accessToken=${user.accessToken}; path=/; SameSite=Strict; HttpOnly`
+    document.cookie = `token=${user.accessToken}; path=/; SameSite=Strict; HttpOnly`
     if (canCheckVersionUpdate.value) {
       void checkVersionUpdate()
     }
@@ -84,7 +84,7 @@ export const useAppStore = defineStore('app', () => {
   function clearUser() {
     userInfo.value = null
     isLoggedIn.value = false
-    document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+    document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
   }
 
   function setSecureKey(value: string) {
