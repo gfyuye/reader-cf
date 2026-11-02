@@ -104,47 +104,56 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
       return jsonResponse({ isSuccess: false, errorMsg: `EPUB解析失败：${err.message || err}` });
     }
   } else if (lowerName.endsWith(".pdf")) {
-    // 移动文件到 book/ 目录（如果还不在），流式 put 不一次性加载全文到内存
-    let finalR2Key = sourceKey;
-    if (sourceKey !== bookKey) {
-      try {
-        const existingBookObj = await env.BUCKET.get(bookKey);
-        if (existingBookObj) {
-          return jsonResponse({ isSuccess: false, errorMsg: "文件已存在于 book 文件夹下，请在该文件夹下导入书籍" });
+    console.log(`[ImportBook] pdf parsing start bookId=${bookId}`);
+    try {
+      // 移动文件到 book/ 目录（如果还不在），流式 put 不一次性加载全文到内存
+      let finalR2Key = sourceKey;
+      if (sourceKey !== bookKey) {
+        try {
+          const existingBookObj = await env.BUCKET.get(bookKey);
+          if (existingBookObj) {
+            return jsonResponse({ isSuccess: false, errorMsg: "文件已存在于 book 文件夹下，请在该文件夹下导入书籍" });
+          }
+          await env.BUCKET.put(bookKey, fileObj.body, { httpMetadata: { contentType: "application/pdf" } });
+          await env.BUCKET.delete(sourceKey);
+          finalR2Key = bookKey;
+          console.log(`[ImportBook] pdf file moved to book/ bookId=${bookId}`);
+        } catch (moveErr: any) {
+          console.log(`[ImportBook] pdf file move warning bookId=${bookId} err=${moveErr.message || moveErr}`);
         }
-        await env.BUCKET.put(bookKey, fileObj.body, { httpMetadata: { contentType: "application/pdf" } });
-        await env.BUCKET.delete(sourceKey);
-        finalR2Key = bookKey;
-        console.log(`[ImportBook] pdf file moved to book/ bookId=${bookId}`);
-      } catch (moveErr: any) {
-        console.log(`[ImportBook] pdf file move warning bookId=${bookId} err=${moveErr.message || moveErr}`);
       }
+      // 仅 Range 读取尾部 64KB 解析页数和元数据，不一次性加载全文到内存
+      const { title, author, totalPages } = await indexPdfIntoDatabase(env, userNs, bookId, fileName, finalR2Key, fileSize);
+      console.log(`[ImportBook] pdf parsing end bookId=${bookId} title=${title} author=${author} totalPages=${totalPages}`);
+      newBook = {
+        name: title,
+        author: author,
+        bookUrl: `local-pdf:${bookId}`,
+        origin: "local-pdf",
+        originName: "本地 PDF",
+        tocUrl: `local-pdf:${bookId}`,
+        canUpdate: false,
+        durChapterIndex: 1,
+        durChapterPos: 0,
+        durChapterTitle: "第 1 页",
+        durChapterTime: now,
+        totalChapterNum: totalPages,
+        kind: "本地PDF",
+      };
+      await env.DB.prepare(
+        `INSERT INTO pdf_books (book_id, user_ns, file_name, r2_key, file_size, total_pages, title, author, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'ready', ?9, ?10)`
+      ).bind(bookId, userNs, fileName, finalR2Key, fileSize, totalPages, title, author, now, now).run();
+    } catch (err: any) {
+      console.log(`[ImportBook] pdf parsing error bookId=${bookId} err=${err.message || err}`);
+      return jsonResponse({ isSuccess: false, errorMsg: `PDF解析失败：${err.message || err}` });
     }
-    // 仅 Range 读取尾部 64KB 解析页数和元数据，不一次性加载全文到内存
-    const { title, author, totalPages } = await indexPdfIntoDatabase(env, userNs, bookId, fileName, finalR2Key, fileSize);
-    newBook = {
-      name: title,
-      author: author,
-      bookUrl: `local-pdf:${bookId}`,
-      origin: "local-pdf",
-      originName: "本地 PDF",
-      tocUrl: `local-pdf:${bookId}`,
-      canUpdate: false,
-      durChapterIndex: 1,
-      durChapterPos: 0,
-      durChapterTitle: "第 1 页",
-      durChapterTime: now,
-      totalChapterNum: totalPages,
-      kind: "本地PDF",
-    };
-    await env.DB.prepare(
-      `INSERT INTO pdf_books (book_id, user_ns, file_name, r2_key, file_size, total_pages, title, author, status, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'ready', ?9, ?10)`
-    ).bind(bookId, userNs, fileName, finalR2Key, fileSize, totalPages, title, author, now, now).run();
   } else if (lowerName.endsWith(".txt")) {
-    // 移动文件到 book/ 目录（如果还不在），流式 put 不一次性加载全文到内存
-    let finalR2Key = sourceKey;
-    if (sourceKey !== bookKey) {
+    console.log(`[ImportBook] txt parsing start bookId=${bookId}`);
+    try {
+      // 移动文件到 book/ 目录（如果还不在），流式 put 不一次性加载全文到内存
+      let finalR2Key = sourceKey;
+      if (sourceKey !== bookKey) {
       try {
         const existingBookObj = await env.BUCKET.get(bookKey);
         if (existingBookObj) {
@@ -196,6 +205,10 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
     );
     for (let i = 0; i < stmts.length; i += 50) {
       await env.DB.batch(stmts.slice(i, i + 50));
+    }
+    } catch (err: any) {
+      console.log(`[ImportBook] txt parsing error bookId=${bookId} err=${err.message || err}`);
+      return jsonResponse({ isSuccess: false, errorMsg: `TXT解析失败：${err.message || err}` });
     }
   } else {
     return jsonResponse({ isSuccess: false, errorMsg: "不支持的文件类型" });
