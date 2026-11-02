@@ -27,7 +27,7 @@ import { importWebdavBook } from './webdav'
 
 async function uploadAndImportBook(file: File, onProgress?: (percent: number) => void): Promise<Book> {
   // 第一步：上传文件到 WebDAV（仅存储，不解析）
-  const uploadResult = await uploadFileChunked({ file, fileName: file.name, target: 'webdav', onProgress })
+  const uploadResult = await uploadFileChunked({ file, fileName: file.name, target: 'webdav', path: 'book', onProgress })
   const filePath = uploadResult.key || uploadResult.name
 
   // 第二步：导入书架（检查重名、转移文件、解析、保存书架）
