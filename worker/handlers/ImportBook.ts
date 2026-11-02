@@ -43,12 +43,11 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   }
 
   const fileObj = await env.BUCKET.get(sourceKey);
-  if (!fileObj) return jsonResponse({ isSuccess: false, errorMsg: "源文件不存在，请先上传" });
-  const bodyBytes = new Uint8Array(await fileObj.arrayBuffer());
-  const fileSize = bodyBytes.byteLength;
+  if (!fileObj || !fileObj.body) return jsonResponse({ isSuccess: false, errorMsg: "源文件不存在，请先上传" });
+  const fileSize = fileObj.size || 0;
 
   console.log(`[ImportBook] fileSize=${fileSize} sourceObj exists=true`);
-  await env.BUCKET.put(bookKey, bodyBytes, {
+  await env.BUCKET.put(bookKey, fileObj.body, {
     httpMetadata: lowerName.endsWith(".epub") ? { contentType: "application/epub+zip" } : lowerName.endsWith(".pdf") ? { contentType: "application/pdf" } : { contentType: "text/plain; charset=utf-8" },
   });
   if (sourceKey !== bookKey) {
@@ -92,7 +91,9 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
       return jsonResponse({ isSuccess: false, errorMsg: `EPUB解析失败：${err.message || err}` });
     }
   } else if (lowerName.endsWith(".pdf")) {
-    const { title, author, totalPages } = await indexPdfIntoDatabase(env, userNs, bookId, fileName, bookKey, fileSize, bodyBytes);
+    const pdfObj = await env.BUCKET.get(bookKey);
+    const pdfBodyBytes = pdfObj ? new Uint8Array(await pdfObj.arrayBuffer()) : new Uint8Array(0);
+    const { title, author, totalPages } = await indexPdfIntoDatabase(env, userNs, bookId, fileName, bookKey, fileSize, pdfBodyBytes);
     newBook = {
       name: title,
       author: author,
@@ -109,7 +110,9 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
       kind: "本地PDF",
     };
   } else if (lowerName.endsWith(".txt")) {
-    const text = decodeTxtBytes(bodyBytes);
+    const txtObj = await env.BUCKET.get(bookKey);
+    const txtBodyBytes = txtObj ? new Uint8Array(await txtObj.arrayBuffer()) : new Uint8Array(0);
+    const text = decodeTxtBytes(txtBodyBytes);
     const utf8Bytes = new TextEncoder().encode(text);
     const chapters = scanTxtChapterOffsets(text, utf8Bytes);
     const totalChapters = chapters.length;
