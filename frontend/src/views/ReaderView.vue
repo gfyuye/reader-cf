@@ -862,7 +862,7 @@ async function jumpFromCatalog(targetIndex: number) {
   store.setChapterScrollProgress(0)
 
   if (!isContinuousMode.value) {
-    await store.loadChapter(targetIndex)
+    await store.loadChapter(targetIndex, true)
     store.closePanel()
     scrollToTop()
     return
