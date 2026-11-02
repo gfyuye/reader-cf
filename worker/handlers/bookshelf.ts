@@ -133,23 +133,23 @@ export async function handleDeleteBooks(request: Request, env: Env, ctx: Executi
       for (const item of bookIds) {
         if (item.type === "epub") {
           stmts.push(
-            env.DB.prepare(`DELETE FROM epub_chapters WHERE book_id = ?1`).bind(item.bookId),
-            env.DB.prepare(`DELETE FROM epub_books WHERE book_id = ?1`).bind(item.bookId)
+            env.DB.prepare(`DELETE FROM epub_chapters WHERE book_id = ?1`).bind(item.bookId).run(),
+            env.DB.prepare(`DELETE FROM epub_books WHERE book_id = ?1`).bind(item.bookId).run()
           );
         } else if (item.type === "txt") {
           stmts.push(
-            env.DB.prepare(`DELETE FROM txt_chapters WHERE book_id = ?1`).bind(item.bookId),
-            env.DB.prepare(`DELETE FROM txt_books WHERE book_id = ?1`).bind(item.bookId)
+            env.DB.prepare(`DELETE FROM txt_chapters WHERE book_id = ?1`).bind(item.bookId).run(),
+            env.DB.prepare(`DELETE FROM txt_books WHERE book_id = ?1`).bind(item.bookId).run()
           );
         } else if (item.type === "pdf") {
           stmts.push(
-            env.DB.prepare(`DELETE FROM pdf_outlines WHERE book_id = ?1`).bind(item.bookId),
-            env.DB.prepare(`DELETE FROM pdf_books WHERE book_id = ?1`).bind(item.bookId)
+            env.DB.prepare(`DELETE FROM pdf_outlines WHERE book_id = ?1`).bind(item.bookId).run(),
+            env.DB.prepare(`DELETE FROM pdf_books WHERE book_id = ?1`).bind(item.bookId).run()
           );
         }
       }
       if (stmts.length > 0) {
-        ctx.waitUntil(env.DB.batch(stmts));
+        ctx.waitUntil(Promise.allSettled(stmts));
       }
     }
 
