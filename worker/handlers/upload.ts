@@ -22,11 +22,9 @@ export async function handleChunkedUploadInit(request: Request, env: Env): Promi
   }
 
   // 上传前检查 R2 是否已有同名文件，避免覆盖并产生碎片
-  try {
-    await env.BUCKET.head(r2Key);
+  const existing = await env.BUCKET.head(r2Key);
+  if (existing) {
     return jsonResponse({ isSuccess: false, errorMsg: `文件已存在：《${safeName}》，请先删除或重命名` });
-  } catch {
-    // 文件不存在，继续上传
   }
 
   let contentType = mimeType || "application/octet-stream";
