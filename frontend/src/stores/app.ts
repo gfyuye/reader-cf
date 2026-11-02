@@ -58,8 +58,7 @@ export const useAppStore = defineStore('app', () => {
         adminAuthorized: data.adminAuthorized,
       })
       isLoggedIn.value = !!data.username
-    document.cookie = `token=${user.accessToken}; path=/; SameSite=Strict; HttpOnly`
-    if (canCheckVersionUpdate.value) {
+      if (canCheckVersionUpdate.value) {
         void checkVersionUpdate()
       }
     } catch {
