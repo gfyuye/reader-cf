@@ -48,7 +48,7 @@ export const useAppStore = defineStore('app', () => {
   async function fetchUserInfo() {
     try {
       const data = await getUserInfo()
-      userInfo.value = data.userInfo
+      userInfo.value = data
       isSecureMode.value = data.secure
       secureKeyRequired.value = data.secureKeyRequired
       adminAuthorized.value = data.adminAuthorized
@@ -57,7 +57,7 @@ export const useAppStore = defineStore('app', () => {
         secureKeyRequired: data.secureKeyRequired,
         adminAuthorized: data.adminAuthorized,
       })
-      isLoggedIn.value = !!data.userInfo?.username
+      isLoggedIn.value = !!data.username
       if (canCheckVersionUpdate.value) {
         void checkVersionUpdate()
       }
