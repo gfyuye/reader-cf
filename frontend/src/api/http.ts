@@ -13,7 +13,7 @@ function dispatchNeedLogin() {
 
 const http = axios.create({
   baseURL: '/reader3',
-  timeout: 300000,
+  timeout: 600000,
   headers: { 'Content-Type': 'application/json' },
 })
 

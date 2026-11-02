@@ -57,6 +57,7 @@ export async function uploadFileChunked(options: ChunkUploadOptions): Promise<an
         chunkFormData,
         {
           headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 240000,
           onUploadProgress: (e) => {
             if (onProgress && e.total) {
               const chunkPercent = e.loaded / e.total
