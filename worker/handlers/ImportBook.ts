@@ -75,14 +75,26 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
         kind: "本地EPUB",
       };
 
-      // 文件保持在 sourceKey，不移动，避免 ReadableStream 消耗导致目标文件损坏
-      // indexEpubIntoDatabase 已通过 R2 range 请求解析，不占内存
+      // 先将文件从 sourceKey 移动到 book/ 目录，再从 bookKey 解析
+      let finalR2Key = sourceKey;
+      if (sourceKey !== bookKey) {
+        try {
+          await env.BUCKET.put(bookKey, fileObj.body, { httpMetadata: { contentType: "application/epub+zip" } });
+          await env.BUCKET.delete(sourceKey);
+          finalR2Key = bookKey;
+          console.log(`[ImportBook] epub file moved to book/ bookId=${bookId}`);
+        } catch (moveErr: any) {
+          console.log(`[ImportBook] epub file move warning bookId=${bookId} err=${moveErr.message || moveErr}`);
+          // 移动失败则保持在 sourceKey 解析
+        }
+      }
+
       await env.DB.prepare(
         `INSERT INTO epub_books (book_id, user_ns, file_name, r2_key, file_size, status, total_chapters, parsed_chapters, title, author, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, 'ready', ?6, ?6, ?7, ?8, ?9, ?10)
          ON CONFLICT(book_id) DO UPDATE SET status='ready', total_chapters=excluded.total_chapters, parsed_chapters=excluded.parsed_chapters, updated_at=excluded.updated_at`
       )
-        .bind(bookId, userNs, fileName, sourceKey, fileSize, totalChapters, displayTitle, author || "未知作者", now, now)
+        .bind(bookId, userNs, fileName, finalR2Key, fileSize, totalChapters, displayTitle, author || "未知作者", now, now)
         .run();
     } catch (err: any) {
       console.log(`[ImportBook] epub parsing error bookId=${bookId} err=${err.message || err}`);
