@@ -519,6 +519,25 @@ function formatChapterHtml(rawText: string, chapterTitle?: string) {
   // Deduplicate title: if content contains a heading matching chapter title or chapter pattern, remove it
   deduplicateChapterTitle(wrapper, chapterTitle)
 
+  // 将 SVG 中的  转换为 见图，避免被 sanitizeHtml 移除，并能被 appendLocalEpubAssetAuth 添加鉴权
+  const svgs = wrapper.querySelectorAll('svg')
+  svgs.forEach((svg) => {
+    const images = Array.from(svg.querySelectorAll('image'))
+    images.forEach((image) => {
+      const href = image.getAttribute('href') || image.getAttribute('xlink:href')
+      if (href) {
+        const img = document.createElement('img')
+        img.setAttribute('src', href)
+        if (image.getAttribute('width')) img.setAttribute('width', image.getAttribute('width'))
+        if (image.getAttribute('height')) img.setAttribute('height', image.getAttribute('height'))
+        image.replaceWith(img)
+      }
+    })
+    if (!svg.querySelector('*')) {
+      svg.remove()
+    }
+  })
+
   appendLocalEpubAssetAuth(wrapper)
   highlightSearchText(wrapper)
   return sanitizeHtml(wrapper.innerHTML)
