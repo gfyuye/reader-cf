@@ -83,17 +83,25 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
       .bind(username, token, expireAt)
       .run();
 
-    return jsonResponse({
-      isSuccess: true,
-      data: {
-        username,
-        accessToken: `${username}:${token}`,
-        isAdmin: existing.is_admin === 1,
-        enableWebdav: existing.enable_webdav === 1,
-        enableLocalStore: existing.enable_local_store === 1,
-        enableAiModel: existing.enable_ai_model === 1,
+    const accessToken = `${username}:${token}`;
+    const cookieValue = `token=${accessToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${30 * 86400}`;
+
+    return jsonResponse(
+      {
+        isSuccess: true,
+        data: {
+          username,
+          accessToken,
+          isAdmin: existing.is_admin === 1,
+          enableWebdav: existing.enable_webdav === 1,
+          enableLocalStore: existing.enable_local_store === 1,
+          enableAiModel: existing.enable_ai_model === 1,
+        },
       },
-    });
+      200,
+      undefined,
+      cookieValue
+    );
   }
 
   if (isLogin) {
@@ -135,17 +143,25 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
     .bind(username, token, expireAt)
     .run();
 
-  return jsonResponse({
-    isSuccess: true,
-    data: {
-      username,
-      accessToken: `${username}:${token}`,
-      isAdmin: isAdmin === 1,
-      enableWebdav: true,
-      enableLocalStore: true,
-      enableAiModel: true,
+  const accessToken = `${username}:${token}`;
+  const cookieValue = `token=${accessToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${30 * 86400}`;
+
+  return jsonResponse(
+    {
+      isSuccess: true,
+      data: {
+        username,
+        accessToken,
+        isAdmin: isAdmin === 1,
+        enableWebdav: true,
+        enableLocalStore: true,
+        enableAiModel: true,
+      },
     },
-  });
+    200,
+    undefined,
+    cookieValue
+  );
 }
 
 export async function handleLogout(request: Request, env: Env): Promise<Response> {
@@ -162,7 +178,12 @@ export async function handleLogout(request: Request, env: Env): Promise<Response
       }
     }
   }
-  return jsonResponse({ isSuccess: true, data: "" });
+  return jsonResponse(
+    { isSuccess: true, data: "" },
+    200,
+    undefined,
+    'token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0'
+  );
 }
 
 export async function handleGetUserInfo(request: Request, env: Env): Promise<Response> {

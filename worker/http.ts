@@ -12,14 +12,15 @@ export function corsHeaders(request?: Request): Record<string, string> {
   return headers;
 }
 
-export function jsonResponse(data: any, status: number = 200, request?: Request): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      ...corsHeaders(request),
-    },
-  });
+export function jsonResponse(data: any, status: number = 200, request?: Request, cookieValue?: string): Response {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...corsHeaders(request),
+  };
+  if (cookieValue) {
+    headers["Set-Cookie"] = cookieValue;
+  }
+  return new Response(JSON.stringify(data), { status, headers });
 }
 
 export function getAccessToken(request: Request): string | null {

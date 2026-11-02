@@ -58,7 +58,8 @@ export const useAppStore = defineStore('app', () => {
         adminAuthorized: data.adminAuthorized,
       })
       isLoggedIn.value = !!data.username
-      if (canCheckVersionUpdate.value) {
+    document.cookie = `token=${user.accessToken}; path=/; SameSite=Strict; HttpOnly`
+    if (canCheckVersionUpdate.value) {
         void checkVersionUpdate()
       }
     } catch {
@@ -75,7 +76,6 @@ export const useAppStore = defineStore('app', () => {
       secureKeyRequired: secureKeyRequired.value,
       adminAuthorized: adminAuthorized.value,
     })
-    document.cookie = `token=${user.accessToken}; path=/; SameSite=Strict; HttpOnly`
     if (canCheckVersionUpdate.value) {
       void checkVersionUpdate()
     }
@@ -84,7 +84,6 @@ export const useAppStore = defineStore('app', () => {
   function clearUser() {
     userInfo.value = null
     isLoggedIn.value = false
-    document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
   }
 
   function setSecureKey(value: string) {
