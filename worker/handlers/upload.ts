@@ -11,8 +11,14 @@ export async function handleChunkedUploadInit(request: Request, env: Env): Promi
   if (!fileName || !fileSize) {
     return jsonResponse({ isSuccess: false, errorMsg: "缺少上传参数" });
   }
-  const cleanPath = (path || "/").replace(/^\/+/, "").replace(/\/$/, "");
+  let cleanPath = (path || "/").replace(/^\/+/, "").replace(/\/$/, "");
   const safeName = fileName.replace(/[/\\?%*:|"<>]/g, "_");
+
+  // 防止路径前缀重复：若 cleanPath 已带 webdav/${userNs}/，去掉重复部分
+  const userNsPrefix = `webdav/${userNs}/`;
+  if (cleanPath.startsWith(userNsPrefix)) {
+    cleanPath = cleanPath.slice(userNsPrefix.length);
+  }
 
   let r2Key = "";
   if (target === "webdav") {
