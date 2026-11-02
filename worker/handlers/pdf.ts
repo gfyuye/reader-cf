@@ -10,11 +10,14 @@ export async function indexPdfIntoDatabase(
   bookId: string,
   fileName: string,
   r2Key: string,
-  fileSize: number,
-  bodyBytes: Uint8Array
+  fileSize: number
 ): Promise<{ title: string; author: string; totalPages: number }> {
   const tailSize = Math.min(65536, fileSize);
-  const tailText = new TextDecoder().decode(bodyBytes.subarray(fileSize - tailSize));
+  const tailObj = await env.BUCKET.get(r2Key, {
+    range: { offset: Math.max(0, fileSize - tailSize), length: tailSize },
+  });
+  const tailBytes = tailObj ? new Uint8Array(await tailObj.arrayBuffer()) : new Uint8Array(0);
+  const tailText = new TextDecoder().decode(tailBytes);
 
   const countMatch = tailText.match(/\/Count\s+(\d+)/);
   const totalPages = countMatch ? parseInt(countMatch[1], 10) : 1;

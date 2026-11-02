@@ -104,12 +104,15 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
       return jsonResponse({ isSuccess: false, errorMsg: `EPUB解析失败：${err.message || err}` });
     }
   } else if (lowerName.endsWith(".pdf")) {
-    const pdfBodyBytes = new Uint8Array(await fileObj.arrayBuffer());
-    // 移动文件到 book/ 目录，避免源文件被误删除
+    // 移动文件到 book/ 目录（如果还不在），流式 put 不一次性加载全文到内存
     let finalR2Key = sourceKey;
     if (sourceKey !== bookKey) {
       try {
-        await env.BUCKET.put(bookKey, pdfBodyBytes, { httpMetadata: { contentType: "application/pdf" } });
+        const existingBookObj = await env.BUCKET.get(bookKey);
+        if (existingBookObj) {
+          return jsonResponse({ isSuccess: false, errorMsg: "文件已存在于 book 文件夹下，请在该文件夹下导入书籍" });
+        }
+        await env.BUCKET.put(bookKey, fileObj.body, { httpMetadata: { contentType: "application/pdf" } });
         await env.BUCKET.delete(sourceKey);
         finalR2Key = bookKey;
         console.log(`[ImportBook] pdf file moved to book/ bookId=${bookId}`);
@@ -117,7 +120,8 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
         console.log(`[ImportBook] pdf file move warning bookId=${bookId} err=${moveErr.message || moveErr}`);
       }
     }
-    const { title, author, totalPages } = await indexPdfIntoDatabase(env, userNs, bookId, fileName, finalR2Key, fileSize, pdfBodyBytes);
+    // 仅 Range 读取尾部 64KB 解析页数和元数据，不一次性加载全文到内存
+    const { title, author, totalPages } = await indexPdfIntoDatabase(env, userNs, bookId, fileName, finalR2Key, fileSize);
     newBook = {
       name: title,
       author: author,
