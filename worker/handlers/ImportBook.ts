@@ -140,10 +140,6 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
         totalChapterNum: totalPages,
         kind: "本地PDF",
       };
-      await env.DB.prepare(
-        `INSERT INTO pdf_books (book_id, user_ns, file_name, r2_key, file_size, total_pages, title, author, status, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'ready', ?9, ?10)`
-      ).bind(bookId, userNs, fileName, finalR2Key, fileSize, totalPages, title, author, now, now).run();
     } catch (err: any) {
       console.log(`[ImportBook] pdf parsing error bookId=${bookId} err=${err.message || err}`);
       return jsonResponse({ isSuccess: false, errorMsg: `PDF解析失败：${err.message || err}` });
