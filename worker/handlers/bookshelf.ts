@@ -117,6 +117,42 @@ export async function handleDeleteBooks(request: Request, env: Env, ctx: Executi
     shelf = shelf.filter((b) => !deleteUrls.has(b.bookUrl) && !deleteUrls.has(b.url));
 
     await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
+
+    // 清理 D1 表记录
+    const bookIds = list.map((b) => {
+      const bookUrl = typeof b === "string" ? b : b.bookUrl || b.url;
+      if (!bookUrl) return null;
+      if (bookUrl.startsWith("local-epub:")) return { bookId: bookUrl.split(":")[1]?.split("#")[0], type: "epub" };
+      if (bookUrl.startsWith("local-txt:")) return { bookId: bookUrl.split(":")[1]?.split("#")[0], type: "txt" };
+      if (bookUrl.startsWith("local-pdf:")) return { bookId: bookUrl.split(":")[1]?.split("#")[0], type: "pdf" };
+      return null;
+    }).filter(Boolean);
+
+    if (bookIds.length > 0) {
+      const stmts: any[] = [];
+      for (const item of bookIds) {
+        if (item.type === "epub") {
+          stmts.push(
+            env.DB.prepare(`DELETE FROM epub_chapters WHERE book_id = ?1`).bind(item.bookId),
+            env.DB.prepare(`DELETE FROM epub_books WHERE book_id = ?1`).bind(item.bookId)
+          );
+        } else if (item.type === "txt") {
+          stmts.push(
+            env.DB.prepare(`DELETE FROM txt_chapters WHERE book_id = ?1`).bind(item.bookId),
+            env.DB.prepare(`DELETE FROM txt_books WHERE book_id = ?1`).bind(item.bookId)
+          );
+        } else if (item.type === "pdf") {
+          stmts.push(
+            env.DB.prepare(`DELETE FROM pdf_outlines WHERE book_id = ?1`).bind(item.bookId),
+            env.DB.prepare(`DELETE FROM pdf_books WHERE book_id = ?1`).bind(item.bookId)
+          );
+        }
+      }
+      if (stmts.length > 0) {
+        ctx.waitUntil(env.DB.batch(stmts));
+      }
+    }
+
     triggerOnChangeSync(env, userNs, ctx);
     return jsonResponse({ isSuccess: true, data: "批量删除成功" });
   } catch (err: any) {
