@@ -52,30 +52,34 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   let newBook: any;
 
   if (lowerName.endsWith(".epub")) {
-    const { title, author, totalChapters } = await indexEpubIntoDatabase(env, userNs, bookId, fileName, bookKey, fileSize);
-    const displayTitle = title || safeName.replace(/\.epub$/i, "");
-    newBook = {
-      name: displayTitle,
-      author: author || "未知作者",
-      bookUrl: `local-epub:${bookId}`,
-      origin: "local-epub",
-      originName: "本地 EPUB",
-      tocUrl: `local-epub:${bookId}`,
-      canUpdate: false,
-      durChapterIndex: 0,
-      durChapterPos: 0,
-      durChapterTitle: "第 1 节",
-      durChapterTime: now,
-      totalChapterNum: totalChapters,
-      kind: "本地EPUB",
-    };
-    await env.DB.prepare(
-      `INSERT INTO epub_books (book_id, user_ns, file_name, r2_key, file_size, status, total_chapters, parsed_chapters, title, author, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, 'ready', ?6, ?6, ?7, ?8, ?9, ?10)
-       ON CONFLICT(book_id) DO UPDATE SET status='ready', total_chapters=excluded.total_chapters, parsed_chapters=excluded.parsed_chapters, updated_at=excluded.updated_at`
-    )
-      .bind(bookId, userNs, fileName, bookKey, fileSize, totalChapters, displayTitle, author || "未知作者", now, now)
-      .run();
+    try {
+      const { title, author, totalChapters } = await indexEpubIntoDatabase(env, userNs, bookId, fileName, bookKey, fileSize);
+      const displayTitle = title || safeName.replace(/\.epub$/i, "");
+      newBook = {
+        name: displayTitle,
+        author: author || "未知作者",
+        bookUrl: `local-epub:${bookId}`,
+        origin: "local-epub",
+        originName: "本地 EPUB",
+        tocUrl: `local-epub:${bookId}`,
+        canUpdate: false,
+        durChapterIndex: 0,
+        durChapterPos: 0,
+        durChapterTitle: "第 1 节",
+        durChapterTime: now,
+        totalChapterNum: totalChapters,
+        kind: "本地EPUB",
+      };
+      await env.DB.prepare(
+        `INSERT INTO epub_books (book_id, user_ns, file_name, r2_key, file_size, status, total_chapters, parsed_chapters, title, author, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'ready', ?6, ?6, ?7, ?8, ?9, ?10)
+         ON CONFLICT(book_id) DO UPDATE SET status='ready', total_chapters=excluded.total_chapters, parsed_chapters=excluded.parsed_chapters, updated_at=excluded.updated_at`
+      )
+        .bind(bookId, userNs, fileName, bookKey, fileSize, totalChapters, displayTitle, author || "未知作者", now, now)
+        .run();
+    } catch (err: any) {
+      return jsonResponse({ isSuccess: false, errorMsg: `EPUB解析失败：${err.message || err}` });
+    }
   } else if (lowerName.endsWith(".pdf")) {
     const { title, author, totalPages } = await indexPdfIntoDatabase(env, userNs, bookId, fileName, bookKey, fileSize, bodyBytes);
     newBook = {
