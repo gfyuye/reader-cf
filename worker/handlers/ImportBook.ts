@@ -11,14 +11,14 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   const userNs = await resolveUserNs(request, env);
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
   const body = await request.json<any>();
-  const { path } = body || {};
+  const { path, name: importName } = body || {};
   if (!path) return jsonResponse({ isSuccess: false, errorMsg: "缺少文件路径" });
 
   console.log(`[ImportBook] start path=${path}`);
 
   // 导入书架阶段：检查重名、转移文件、解析书籍、保存书架
   const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
-  const fileName = path.split("/").pop() || path;
+  const fileName = importName || path.split("/").pop() || path;
   const safeName = fileName.replace(/[/\\?%*:|"<>]/g, "_");
   const lowerName = safeName.toLowerCase();
 
@@ -105,7 +105,19 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
     }
   } else if (lowerName.endsWith(".pdf")) {
     const pdfBodyBytes = new Uint8Array(await fileObj.arrayBuffer());
-    const { title, author, totalPages } = await indexPdfIntoDatabase(env, userNs, bookId, fileName, sourceKey, fileSize, pdfBodyBytes);
+    // 移动文件到 book/ 目录，避免源文件被误删除
+    let finalR2Key = sourceKey;
+    if (sourceKey !== bookKey) {
+      try {
+        await env.BUCKET.put(bookKey, pdfBodyBytes, { httpMetadata: { contentType: "application/pdf" } });
+        await env.BUCKET.delete(sourceKey);
+        finalR2Key = bookKey;
+        console.log(`[ImportBook] pdf file moved to book/ bookId=${bookId}`);
+      } catch (moveErr: any) {
+        console.log(`[ImportBook] pdf file move warning bookId=${bookId} err=${moveErr.message || moveErr}`);
+      }
+    }
+    const { title, author, totalPages } = await indexPdfIntoDatabase(env, userNs, bookId, fileName, finalR2Key, fileSize, pdfBodyBytes);
     newBook = {
       name: title,
       author: author,
@@ -124,9 +136,22 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
     await env.DB.prepare(
       `INSERT INTO pdf_books (book_id, user_ns, file_name, r2_key, file_size, total_pages, title, author, status, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'ready', ?9, ?10)`
-    ).bind(bookId, userNs, fileName, sourceKey, fileSize, totalPages, title, author, now, now).run();
+    ).bind(bookId, userNs, fileName, finalR2Key, fileSize, totalPages, title, author, now, now).run();
   } else if (lowerName.endsWith(".txt")) {
-    const text = decodeTxtBytes(new Uint8Array(await fileObj.arrayBuffer()));
+    const fileBytes = new Uint8Array(await fileObj.arrayBuffer());
+    // 移动文件到 book/ 目录，避免源文件被误删除
+    let finalR2Key = sourceKey;
+    if (sourceKey !== bookKey) {
+      try {
+        await env.BUCKET.put(bookKey, fileBytes, { httpMetadata: { contentType: "text/plain; charset=utf-8" } });
+        await env.BUCKET.delete(sourceKey);
+        finalR2Key = bookKey;
+        console.log(`[ImportBook] txt file moved to book/ bookId=${bookId}`);
+      } catch (moveErr: any) {
+        console.log(`[ImportBook] txt file move warning bookId=${bookId} err=${moveErr.message || moveErr}`);
+      }
+    }
+    const text = decodeTxtBytes(fileBytes);
     const utf8Bytes = new TextEncoder().encode(text);
     const chapters = scanTxtChapterOffsets(text, utf8Bytes);
     const totalChapters = chapters.length;
@@ -153,7 +178,7 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '本地导入', 'ready', ?8, ?9)
        ON CONFLICT(book_id) DO UPDATE SET file_size=excluded.file_size, total_chapters=excluded.total_chapters, title=excluded.title, updated_at=excluded.updated_at`
     )
-      .bind(bookId, userNs, fileName, sourceKey, fileSize, totalChapters, title, now, now)
+      .bind(bookId, userNs, fileName, finalR2Key, fileSize, totalChapters, title, now, now)
       .run();
     const stmts = chapters.map((ch, idx) =>
       env.DB.prepare(

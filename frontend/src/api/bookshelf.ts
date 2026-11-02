@@ -131,7 +131,7 @@ export function getCoverUrl(coverUrl?: string) {
 }
 
 export function withAuthQuery(url: string) {
-  if (!url.startsWith('/reader3/localEpubAsset')) return url
+  if (!url.startsWith('/reader3/localEpubAsset') && !url.startsWith('/reader3/epub/asset')) return url
   const [path, rawQuery = ''] = url.split('?')
   const params = new URLSearchParams(rawQuery)
   appendAuthQueryParams(params)

@@ -605,7 +605,7 @@ function appendLocalEpubAssetAuth(root: HTMLElement) {
   const images = Array.from(root.querySelectorAll('img')) as HTMLImageElement[]
   images.forEach((image) => {
     const src = image.getAttribute('src') || ''
-    if (src.startsWith('/reader3/localEpubAsset')) {
+    if (src.startsWith('/reader3/localEpubAsset') || src.startsWith('/reader3/epub/asset')) {
       image.setAttribute('src', withAuthQuery(src))
     }
   })

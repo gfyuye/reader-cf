@@ -11,7 +11,6 @@ export function buildOpenAISpeechUrl(baseUrl: string) {
 }
 
 export interface OpenAISpeechRequest {
-  source?: 'browser' | 'server'
   baseUrl: string
   apiKey?: string
   input: string
@@ -51,7 +50,6 @@ async function readSpeechError(response: Response) {
 }
 
 export async function requestOpenAISpeechAudio({
-  source = 'browser',
   baseUrl,
   apiKey,
   input,
@@ -68,45 +66,19 @@ export async function requestOpenAISpeechAudio({
     response_format: format || 'mp3',
     speed,
   }
-  const response = source === 'server'
-    ? await fetch('/reader3/aiProxy', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...buildReaderAuthHeaders(),
-      },
-      body: JSON.stringify({
-        useServerConfig: true,
-        kind: 'speech',
-        path: '/v1/audio/speech',
-        body,
-      }),
-      signal,
-    })
-    : await fetch(buildOpenAISpeechUrl(baseUrl), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...buildAuthHeaders(apiKey),
-      },
-      body: JSON.stringify(body),
-      signal,
-    })
+  const response = await fetch(buildOpenAISpeechUrl(baseUrl), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildAuthHeaders(apiKey),
+    },
+    body: JSON.stringify(body),
+    signal,
+  })
 
   if (!response.ok) {
     throw new Error(await readSpeechError(response))
   }
 
   return response.blob()
-}
-
-function buildReaderAuthHeaders() {
-  const headers: Record<string, string> = {}
-  try {
-    const token = localStorage.getItem('accessToken') || ''
-    if (token) headers.Authorization = token
-  } catch {
-    // ignore storage access failures
-  }
-  return headers
 }

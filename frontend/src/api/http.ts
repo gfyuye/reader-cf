@@ -19,10 +19,7 @@ const http = axios.create({
 
 // ─── Request interceptor: attach token ───
 http.interceptors.request.use((config) => {
-  const { accessToken, secureKey } = buildAuthHeaderValues(localStorage)
-  if (accessToken) {
-    config.headers.Authorization = accessToken
-  }
+  const { secureKey } = buildAuthHeaderValues(localStorage)
   if (secureKey) {
     config.headers['X-Secure-Key'] = secureKey
   }

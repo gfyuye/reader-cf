@@ -452,9 +452,8 @@ async function downloadEntry(entry: EntryRow) {
     appStore.showToast(`开始下载《${entry.name}》`, 'success')
   } catch {
     try {
-      const { accessToken, secureKey } = buildAuthHeaderValues(localStorage)
+      const { secureKey } = buildAuthHeaderValues(localStorage)
       const q = new URLSearchParams({ path: toR2Key(entry.path) })
-      if (accessToken) q.set('token', accessToken)
       if (secureKey) q.set('key', secureKey)
       window.open(`/reader3/getWebdavFile?${q.toString()}`, '_blank')
     } catch (e: any) {

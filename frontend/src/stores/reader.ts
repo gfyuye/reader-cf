@@ -1275,10 +1275,6 @@ export const useReaderStore = defineStore('reader', () => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
-    const token = localStorage.getItem('accessToken')
-    if (token) {
-      headers.Authorization = token
-    }
 
     void fetch('/reader3/saveBookProgress', {
       method: 'POST',

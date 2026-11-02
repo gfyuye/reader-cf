@@ -548,12 +548,6 @@ export async function uploadGeneratedMap({
   const formData = new FormData()
   formData.append('file', blob, filename)
 
-  const headers: Record<string, string> = {}
-  const token = safeLocalStorageGet('accessToken')
-  if (token) {
-    headers.Authorization = token
-  }
-
   const response = await fetchImpl('/reader3/uploadFile?type=ai-maps', {
     method: 'POST',
     headers,
@@ -1079,7 +1073,6 @@ async function requestModelJson({
     return fetchImpl('/reader3/aiProxy', {
       method: 'POST',
       headers: {
-        ...buildReaderAuthHeaders(),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -1096,7 +1089,6 @@ async function requestModelJson({
     return fetchImpl('/reader3/aiProxy', {
       method: 'POST',
       headers: {
-        ...buildReaderAuthHeaders(),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -1242,7 +1234,6 @@ async function fetchImageBlob(imageUrl: string, fetchImpl: typeof fetch, useBack
     ? await fetchImpl('/reader3/aiProxyImage', {
       method: 'POST',
       headers: {
-        ...buildReaderAuthHeaders(),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ url: imageUrl }),
@@ -1252,21 +1243,4 @@ async function fetchImageBlob(imageUrl: string, fetchImpl: typeof fetch, useBack
     throw new Error(await readModelError(response, '地图图片下载失败'))
   }
   return response.blob()
-}
-
-function buildReaderAuthHeaders() {
-  const headers: Record<string, string> = {}
-  const token = safeLocalStorageGet('accessToken')
-  if (token) {
-    headers.Authorization = token
-  }
-  return headers
-}
-
-function safeLocalStorageGet(key: string) {
-  try {
-    return localStorage.getItem(key) || ''
-  } catch {
-    return ''
-  }
 }
