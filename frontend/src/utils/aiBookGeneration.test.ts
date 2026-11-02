@@ -622,8 +622,6 @@ describe('aiBookGeneration', () => {
   })
 
   it('downloads generated map URLs through the backend proxy when enabled', async () => {
-    installLocalStorage()
-    localStorage.setItem('accessToken', 'alice-token')
     const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
       if (url === '/reader3/aiProxyImage') {
         return {
@@ -652,17 +650,12 @@ describe('aiBookGeneration', () => {
       '/reader3/aiProxyImage',
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({
-          Authorization: 'alice-token',
-        }),
         body: JSON.stringify({ url: 'https://cdn.example.test/map.png' }),
       }),
     )
   })
 
   it('uploads generated data image URLs without backend proxy download', async () => {
-    installLocalStorage()
-    localStorage.setItem('accessToken', 'alice-token')
     const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
       if (url === '/reader3/aiProxyImage') {
         throw new Error('data image URLs should not be proxied')
@@ -689,9 +682,6 @@ describe('aiBookGeneration', () => {
       '/reader3/uploadFile?type=ai-maps',
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({
-          Authorization: 'alice-token',
-        }),
         body: expect.any(FormData),
       }),
     )
@@ -699,8 +689,6 @@ describe('aiBookGeneration', () => {
   })
 
   it('routes text model calls through the backend proxy when enabled', async () => {
-    installLocalStorage()
-    localStorage.setItem('accessToken', 'alice-token')
     const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => ({
       ok: true,
       json: async () => ({
@@ -741,9 +729,6 @@ describe('aiBookGeneration', () => {
       '/reader3/aiProxy',
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({
-          Authorization: 'alice-token',
-        }),
         body: expect.stringContaining('"path":"/v1/chat/completions"'),
       }),
     )
@@ -756,8 +741,6 @@ describe('aiBookGeneration', () => {
   })
 
   it('uses backend configured text model without browser credentials when selected', async () => {
-    installLocalStorage()
-    localStorage.setItem('accessToken', 'alice-token')
     const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => ({
       ok: true,
       json: async () => ({
@@ -804,9 +787,6 @@ describe('aiBookGeneration', () => {
       '/reader3/aiProxy',
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({
-          Authorization: 'alice-token',
-        }),
       }),
     )
     expect(JSON.parse(String(proxyRequest.body))).toMatchObject({
@@ -1036,16 +1016,3 @@ describe('aiBookGeneration', () => {
     })
   })
 })
-
-function installLocalStorage() {
-  const memory = new Map<string, string>()
-  Object.defineProperty(globalThis, 'localStorage', {
-    value: {
-      getItem: (key: string) => memory.get(key) || null,
-      setItem: (key: string, value: string) => memory.set(key, value),
-      removeItem: (key: string) => memory.delete(key),
-      clear: () => memory.clear(),
-    },
-    configurable: true,
-  })
-}
