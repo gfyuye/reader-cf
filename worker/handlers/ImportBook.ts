@@ -36,10 +36,13 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
 
   console.log(`[ImportBook] sourceKey=${sourceKey} bookKey=${bookKey}`);
 
-  // 检查 book/ 目录下是否已有同名文件，避免覆盖
-  const existingBookObj = await env.BUCKET.get(bookKey);
-  if (existingBookObj) {
-    return jsonResponse({ isSuccess: false, errorMsg: "文件已存在于 book 文件夹下，请在该文件夹下导入书籍" });
+  // 如果文件已在 book/ 目录下，直接解析入库，不需要移动
+  if (sourceKey !== bookKey) {
+    // 检查 book/ 目录下是否已有同名文件，避免覆盖
+    const existingBookObj = await env.BUCKET.get(bookKey);
+    if (existingBookObj) {
+      return jsonResponse({ isSuccess: false, errorMsg: "文件已存在于 book 文件夹下，请在该文件夹下导入书籍" });
+    }
   }
 
   const fileObj = await env.BUCKET.get(sourceKey);

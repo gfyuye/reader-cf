@@ -521,12 +521,6 @@ async function importToShelf(entry: EntryRow) {
   const cleanName = entry.name.trim()
   const nameWithoutExt = cleanName.replace(/\.[^/.]+$/, '').trim()
 
-  // 防止对 book/ 目录下已导入的文件重复导入（避免源文件被误删）
-  if (entry.path.includes('/book/')) {
-    appStore.showToast(`《${cleanName}》已在 /book 目录中，无需重复导入`, 'warning')
-    return
-  }
-
   const isDuplicate = shelfStore.books.some((b) => {
     const bName = (b.name || '').trim()
     return bName === cleanName || bName === nameWithoutExt
