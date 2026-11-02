@@ -528,8 +528,10 @@ function formatChapterHtml(rawText: string, chapterTitle?: string) {
       if (href) {
         const img = document.createElement('img')
         img.setAttribute('src', href)
-        if (image.getAttribute('width')) img.setAttribute('width', image.getAttribute('width'))
-        if (image.getAttribute('height')) img.setAttribute('height', image.getAttribute('height'))
+      const width = image.getAttribute('width')
+      const height = image.getAttribute('height')
+      if (width) img.setAttribute('width', width)
+      if (height) img.setAttribute('height', height)
         image.replaceWith(img)
       }
     })

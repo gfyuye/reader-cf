@@ -1304,12 +1304,14 @@ export const useReaderStore = defineStore('reader', () => {
 
     const request = (async () => {
       try {
+        const book_ = book.value
+        if (!book_) return null
         const chapter = chapters.value[index]
 
-        const isLocal = isLocalBook(book.value)
+        const isLocal = isLocalBook(book_)
         const useBrowserCache = !isLocal
         const browserCached = useBrowserCache
-          ? await getBrowserCachedChapter(book.value.bookUrl, chapter.url).catch(() => null)
+          ? await getBrowserCachedChapter(book_.bookUrl, chapter.url).catch(() => null)
           : null
 
         if (!forceRefresh && browserCached) {
@@ -1326,22 +1328,22 @@ export const useReaderStore = defineStore('reader', () => {
         try {
           const result = await getBookContent({
             chapterUrl: chapter.url,
-            bookSourceUrl: book.value.origin,
+            bookSourceUrl: book_.origin,
             refresh: forceRefresh ? 1 : 0,
           })
           const chapterContent = result
 
-      if (useBrowserCache) {
-        await setBrowserCachedChapter({
-          bookUrl: book.value.bookUrl,
-          chapterUrl: chapter.url,
-          chapterTitle: chapter.title,
-          content: chapterContent,
-        }).catch(() => undefined)
-      }
+          if (useBrowserCache) {
+            await setBrowserCachedChapter({
+              bookUrl: book_.bookUrl,
+              chapterUrl: chapter.url,
+              chapterTitle: chapter.title,
+              content: chapterContent,
+            }).catch(() => undefined)
+          }
 
-      preloadedContent.value.set(index, chapterContent)
-      return chapterContent
+          preloadedContent.value.set(index, chapterContent)
+          return chapterContent
         } catch (error) {
           if (browserCached) {
             appStore.showToast('网络请求失败，已切换到本地缓存章节', 'warning')
