@@ -4,7 +4,7 @@ import { Env } from "../types";
 import * as documentHandlers from "../handlers/document";
 import { indexEpubIntoDatabase } from "../handlers/epub";
 import { indexPdfIntoDatabase } from "../handlers/pdf";
-import { decodeTxtBytes, scanTxtChapterOffsets } from "../handlers/txt";
+import { decodeTxtBytes, scanTxtChapterOffsets, scanTxtChaptersStreaming } from "../handlers/txt";
 import { triggerOnChangeSync } from "./webdav";
 
 export async function handleImportWebdavBook(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -138,12 +138,15 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'ready', ?9, ?10)`
     ).bind(bookId, userNs, fileName, finalR2Key, fileSize, totalPages, title, author, now, now).run();
   } else if (lowerName.endsWith(".txt")) {
-    const fileBytes = new Uint8Array(await fileObj.arrayBuffer());
-    // 移动文件到 book/ 目录，避免源文件被误删除
+    // 移动文件到 book/ 目录（如果还不在），流式 put 不一次性加载全文到内存
     let finalR2Key = sourceKey;
     if (sourceKey !== bookKey) {
       try {
-        await env.BUCKET.put(bookKey, fileBytes, { httpMetadata: { contentType: "text/plain; charset=utf-8" } });
+        const existingBookObj = await env.BUCKET.get(bookKey);
+        if (existingBookObj) {
+          return jsonResponse({ isSuccess: false, errorMsg: "文件已存在于 book 文件夹下，请在该文件夹下导入书籍" });
+        }
+        await env.BUCKET.put(bookKey, fileObj.body, { httpMetadata: { contentType: "text/plain; charset=utf-8" } });
         await env.BUCKET.delete(sourceKey);
         finalR2Key = bookKey;
         console.log(`[ImportBook] txt file moved to book/ bookId=${bookId}`);
@@ -151,9 +154,9 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
         console.log(`[ImportBook] txt file move warning bookId=${bookId} err=${moveErr.message || moveErr}`);
       }
     }
-    const text = decodeTxtBytes(fileBytes);
-    const utf8Bytes = new TextEncoder().encode(text);
-    const chapters = scanTxtChapterOffsets(text, utf8Bytes);
+
+    // 流式扫描章节：分块 Range 读取 R2，不一次性加载全文到内存
+    const chapters = await scanTxtChaptersStreaming(env, finalR2Key, fileSize);
     const totalChapters = chapters.length;
     const title = safeName.replace(/\.txt$/i, "");
     newBook = {
@@ -171,7 +174,7 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
       totalChapterNum: totalChapters,
       latestChapterTitle: chapters[chapters.length - 1]?.title,
       kind: "本地TXT",
-      wordCount: `${text.length}字`,
+      wordCount: `${Math.ceil(fileSize / 2)}字`,
     };
     await env.DB.prepare(
       `INSERT INTO txt_books (book_id, user_ns, file_name, r2_key, file_size, total_chapters, title, author, status, created_at, updated_at)

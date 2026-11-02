@@ -235,3 +235,88 @@ export async function handleTxtInfo(bookId: string, env: Env): Promise<Response>
   if (!book) return jsonResponse({ isSuccess: false, errorMsg: "未找到该 TXT 书籍" });
   return jsonResponse({ isSuccess: true, data: book });
 }
+
+/**
+ * 流式扫描 TXT 章节：分块 Range 请求读取 R2 文件，边读边扫描章节标题，
+ * 不一次性将全文加载到内存。只保留章节元数据（title/offset/length）。
+ *
+ * @param r2Key   R2 对象键
+ * @param fileSize 文件总字节数
+ * @param chunkSize 每块读取字节数（默认 256KB）
+ * @param overlap   相邻块重叠字节数（默认 16KB，用于拼接跨块行和章节标题）
+ */
+export async function scanTxtChaptersStreaming(
+  env: Env,
+  r2Key: string,
+  fileSize: number,
+  chunkSize = 256 * 1024,
+  overlap = 16 * 1024
+): Promise<Array<{ title: string; offset: number; length: number }>> {
+  const regex = /^\s*(第[0-9一二三四五六七八九十百千万零两]+[章回节卷集幕篇部话段]|Chapter\s+\d+|序章|引子|楔子|尾声|番外)[^\r\n]*$/gm;
+
+  const byteOffsets: number[] = [];
+  const titles: string[] = [];
+
+  let carryOver = "";              // 上一块未完成的行
+  let carryOverAbsOffset = 0;      // carryOver 在文件中的绝对字节偏移
+
+  const decoder = new TextDecoder("utf-8", { fatal: false, ignoreBOM: false });
+
+  for (let offset = 0; offset < fileSize; offset += chunkSize) {
+    const length = Math.min(chunkSize + overlap, fileSize - offset);
+    const obj = await env.BUCKET.get(r2Key, { range: { offset, length } });
+    if (!obj) break;
+
+    const bytes = new Uint8Array(await obj.arrayBuffer());
+    const text = decoder.decode(bytes, { stream: offset + length < fileSize });
+
+    const fullText = carryOver ? carryOver + text : text;
+    const lines = fullText.split(/\r?\n/);
+
+    const isNotFileEnd = offset + length < fileSize;
+    const completeLines = isNotFileEnd ? lines.slice(0, -1) : lines;
+
+    let absOffset = carryOverAbsOffset;
+
+    for (const line of completeLines) {
+      const lineByteLen = new TextEncoder().encode(line).length;
+      const lineStartAbs = absOffset;
+
+      if (regex.test(line.trim())) {
+        byteOffsets.push(lineStartAbs);
+        titles.push(line.trim());
+      }
+
+      absOffset = lineStartAbs + lineByteLen + 1; // +1 for newline character
+    }
+
+    if (isNotFileEnd && lines.length > 0) {
+      carryOver = lines[lines.length - 1];
+      carryOverAbsOffset = absOffset;
+    } else {
+      carryOver = "";
+      carryOverAbsOffset = 0;
+    }
+  }
+
+  const chapters: Array<{ title: string; offset: number; length: number }> = [];
+
+  if (byteOffsets.length === 0) {
+    return [{ title: "全本", offset: 0, length: fileSize }];
+  }
+
+  if (byteOffsets[0] > 0) {
+    chapters.push({ title: "序章", offset: 0, length: byteOffsets[0] });
+  }
+
+  for (let i = 0; i < byteOffsets.length; i++) {
+    const start = byteOffsets[i];
+    const end = i + 1 < byteOffsets.length ? byteOffsets[i + 1] : fileSize;
+    const len = end - start;
+    if (len > 0) {
+      chapters.push({ title: titles[i], offset: start, length: len });
+    }
+  }
+
+  return chapters;
+}
