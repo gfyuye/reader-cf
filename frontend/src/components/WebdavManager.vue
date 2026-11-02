@@ -192,8 +192,13 @@ const errorMessage = ref('')
 const userNs = computed(() => appStore.userInfo?.username || '')
 
 function toR2Key(virtualPath: string): string {
-  const clean = virtualPath.replace(/^\/+/, '').replace(/\/$/, '')
-  return clean ? `webdav/${userNs.value}/${clean}/` : `webdav/${userNs.value}/`
+  const clean = virtualPath.replace(/^\/+/, '');
+  return clean ? `webdav/${userNs.value}/${clean}` : `webdav/${userNs.value}/`;
+}
+
+function toR2DirKey(virtualPath: string): string {
+  const clean = virtualPath.replace(/^\/+/, '').replace(/\/$/, '');
+  return clean ? `webdav/${userNs.value}/${clean}/` : `webdav/${userNs.value}/`;
 }
 
 function toVirtualPath(r2Key: string): string {
@@ -293,7 +298,7 @@ async function loadFiles(virtualPath = '/') {
   loading.value = true
   errorMessage.value = ''
   try {
-    const r2Path = toR2Key(virtualPath)
+    const r2Path = toR2DirKey(virtualPath)
     const list = await getWebdavFileList(r2Path)
     currentPath.value = virtualPath
     selectedPaths.value = []
@@ -359,7 +364,7 @@ async function handleUpload(event: Event) {
   try {
     await uploadFilesToWebdav(
       files.map((file) => ({ file, name: file.name })),
-      toR2Key(currentPath.value),
+      currentPath.value,
       (percent) => {
         uploadProgress.value = percent
       }
@@ -389,7 +394,7 @@ async function createBackup() {
     const filename = buildBackupFilename()
     await uploadFilesToWebdav(
       [{ file: blob, name: filename }],
-      toR2Key('/backups'),
+      '/backups',
     )
     appStore.showToast(`标准 ZIP 备份已保存: ${filename}`, 'success')
     await loadFiles('/backups')
