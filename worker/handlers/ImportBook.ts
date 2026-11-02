@@ -47,12 +47,6 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   const fileSize = fileObj.size || 0;
 
   console.log(`[ImportBook] fileSize=${fileSize} sourceObj exists=true`);
-  await env.BUCKET.put(bookKey, fileObj.body, {
-    httpMetadata: lowerName.endsWith(".epub") ? { contentType: "application/epub+zip" } : lowerName.endsWith(".pdf") ? { contentType: "application/pdf" } : { contentType: "text/plain; charset=utf-8" },
-  });
-  if (sourceKey !== bookKey) {
-    await env.BUCKET.delete(sourceKey);
-  }
 
   const now = Math.floor(Date.now() / 1000);
   const bookId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -61,7 +55,8 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   if (lowerName.endsWith(".epub")) {
     console.log(`[ImportBook] epub parsing start bookId=${bookId}`);
     try {
-      const { title, author, totalChapters } = await indexEpubIntoDatabase(env, userNs, bookId, fileName, bookKey, fileSize);
+      // 直接从 sourceKey 解析（R2 range 读取，不占内存），不先 copy 到 bookKey
+      const { title, author, totalChapters } = await indexEpubIntoDatabase(env, userNs, bookId, fileName, sourceKey, fileSize);
       console.log(`[ImportBook] epub parsing end bookId=${bookId} title=${title} author=${author} totalChapters=${totalChapters}`);
       const displayTitle = title || safeName.replace(/\.epub$/i, "");
       newBook = {
@@ -79,21 +74,35 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
         totalChapterNum: totalChapters,
         kind: "本地EPUB",
       };
+
+      // 解析成功后，尝试将文件从 sourceKey 移动到 bookKey（流式 copy，失败不影响解析结果）
+      let finalR2Key = sourceKey;
+      if (sourceKey !== bookKey) {
+        try {
+          await env.BUCKET.put(bookKey, fileObj.body, { httpMetadata: { contentType: "application/epub+zip" } });
+          await env.BUCKET.delete(sourceKey);
+          finalR2Key = bookKey;
+          console.log(`[ImportBook] epub file moved to book/ bookId=${bookId}`);
+        } catch (moveErr: any) {
+          console.log(`[ImportBook] epub file move warning bookId=${bookId} err=${moveErr.message || moveErr}`);
+          // 移动失败不影响解析结果，文件保持在 sourceKey
+        }
+      }
+
       await env.DB.prepare(
         `INSERT INTO epub_books (book_id, user_ns, file_name, r2_key, file_size, status, total_chapters, parsed_chapters, title, author, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, 'ready', ?6, ?6, ?7, ?8, ?9, ?10)
          ON CONFLICT(book_id) DO UPDATE SET status='ready', total_chapters=excluded.total_chapters, parsed_chapters=excluded.parsed_chapters, updated_at=excluded.updated_at`
       )
-        .bind(bookId, userNs, fileName, bookKey, fileSize, totalChapters, displayTitle, author || "未知作者", now, now)
+        .bind(bookId, userNs, fileName, finalR2Key, fileSize, totalChapters, displayTitle, author || "未知作者", now, now)
         .run();
     } catch (err: any) {
       console.log(`[ImportBook] epub parsing error bookId=${bookId} err=${err.message || err}`);
       return jsonResponse({ isSuccess: false, errorMsg: `EPUB解析失败：${err.message || err}` });
     }
   } else if (lowerName.endsWith(".pdf")) {
-    const pdfObj = await env.BUCKET.get(bookKey);
-    const pdfBodyBytes = pdfObj ? new Uint8Array(await pdfObj.arrayBuffer()) : new Uint8Array(0);
-    const { title, author, totalPages } = await indexPdfIntoDatabase(env, userNs, bookId, fileName, bookKey, fileSize, pdfBodyBytes);
+    const pdfBodyBytes = new Uint8Array(await fileObj.arrayBuffer());
+    const { title, author, totalPages } = await indexPdfIntoDatabase(env, userNs, bookId, fileName, sourceKey, fileSize, pdfBodyBytes);
     newBook = {
       name: title,
       author: author,
@@ -109,10 +118,12 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
       totalChapterNum: totalPages,
       kind: "本地PDF",
     };
+    await env.DB.prepare(
+      `INSERT INTO pdf_books (book_id, user_ns, file_name, r2_key, file_size, total_pages, title, author, status, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'ready', ?9, ?10)`
+    ).bind(bookId, userNs, fileName, sourceKey, fileSize, totalPages, title, author, now, now).run();
   } else if (lowerName.endsWith(".txt")) {
-    const txtObj = await env.BUCKET.get(bookKey);
-    const txtBodyBytes = txtObj ? new Uint8Array(await txtObj.arrayBuffer()) : new Uint8Array(0);
-    const text = decodeTxtBytes(txtBodyBytes);
+    const text = decodeTxtBytes(new Uint8Array(await fileObj.arrayBuffer()));
     const utf8Bytes = new TextEncoder().encode(text);
     const chapters = scanTxtChapterOffsets(text, utf8Bytes);
     const totalChapters = chapters.length;
@@ -139,7 +150,7 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '本地导入', 'ready', ?8, ?9)
        ON CONFLICT(book_id) DO UPDATE SET file_size=excluded.file_size, total_chapters=excluded.total_chapters, title=excluded.title, updated_at=excluded.updated_at`
     )
-      .bind(bookId, userNs, fileName, bookKey, fileSize, totalChapters, title, now, now)
+      .bind(bookId, userNs, fileName, sourceKey, fileSize, totalChapters, title, now, now)
       .run();
     const stmts = chapters.map((ch, idx) =>
       env.DB.prepare(
