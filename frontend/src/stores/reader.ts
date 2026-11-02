@@ -667,7 +667,6 @@ export const useReaderStore = defineStore('reader', () => {
 
   async function fetchOpenAIAudioBlob(rawText: string, signal?: AbortSignal) {
     return requestOpenAISpeechAudio({
-      source: speechConfig.openaiSource,
       baseUrl: speechConfig.openaiBaseUrl,
       apiKey: speechConfig.openaiApiKey || undefined,
       input: rawText.slice(0, 4096),

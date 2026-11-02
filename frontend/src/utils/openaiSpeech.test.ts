@@ -6,9 +6,7 @@ afterEach(() => {
 })
 
 describe('openaiSpeech', () => {
-  it('routes server configured speech through aiProxy without browser credentials', async () => {
-    installLocalStorage()
-    localStorage.setItem('accessToken', 'alice-token')
+  it('calls external TTS API directly with browser apiKey', async () => {
     const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => ({
       ok: true,
       blob: async () => new Blob(['audio'], { type: 'audio/mpeg' }),
@@ -17,39 +15,34 @@ describe('openaiSpeech', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const blob = await requestOpenAISpeechAudio({
-      source: 'server',
-      baseUrl: '',
+      baseUrl: 'https://api.example.com',
       apiKey: 'browser-key',
       input: '你好',
-      model: 'browser-model',
-      voice: 'browser-voice',
+      model: 'tts-1',
+      voice: 'alloy',
       format: 'mp3',
       speed: 1,
     })
 
     expect(blob.type).toBe('audio/mpeg')
     expect(fetchMock).toHaveBeenCalledWith(
-      '/reader3/aiProxy',
+      'https://api.example.com/v1/audio/speech',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({
-          Authorization: 'alice-token',
+          Authorization: 'Bearer browser-key',
           'Content-Type': 'application/json',
         }),
       }),
     )
     const init = fetchMock.mock.calls[0]?.[1] as unknown as RequestInit
     expect(JSON.parse(String(init.body))).toMatchObject({
-      useServerConfig: true,
-      kind: 'speech',
-      path: '/v1/audio/speech',
-      body: {
-        input: '你好',
-        response_format: 'mp3',
-        speed: 1,
-      },
+      input: '你好',
+      model: 'tts-1',
+      voice: 'alloy',
+      response_format: 'mp3',
+      speed: 1,
     })
-    expect(String(init.body)).not.toContain('browser-key')
   })
 })
 

@@ -550,7 +550,7 @@ export async function uploadGeneratedMap({
 
   const response = await fetchImpl('/reader3/uploadFile?type=ai-maps', {
     method: 'POST',
-    headers,
+    headers: {},
     body: formData,
   })
   if (!response.ok) {
