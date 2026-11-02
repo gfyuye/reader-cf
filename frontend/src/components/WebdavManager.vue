@@ -189,6 +189,20 @@ const loading = ref(false)
 const working = ref(false)
 const errorMessage = ref('')
 
+const userNs = computed(() => appStore.userInfo?.username || '')
+
+function toR2Key(virtualPath: string): string {
+  const clean = virtualPath.replace(/^\/+/, '').replace(/\/$/, '')
+  return clean ? `webdav/${userNs.value}/${clean}/` : `webdav/${userNs.value}/`
+}
+
+function toVirtualPath(r2Key: string): string {
+  const prefix = `webdav/${userNs.value}/`
+  if (!r2Key.startsWith(prefix)) return r2Key
+  const rest = r2Key.slice(prefix.length).replace(/\/$/, '')
+  return rest ? `/${rest}` : '/'
+}
+
 const webdavAvailable = computed(() => {
   if (!appStore.isSecureMode) return true
   return appStore.isLoggedIn && !!appStore.userInfo?.enableWebdav
@@ -275,18 +289,19 @@ function toggleSelection(path: string) {
   }
 }
 
-async function loadFiles(path = '/') {
+async function loadFiles(virtualPath = '/') {
   loading.value = true
   errorMessage.value = ''
   try {
-    const list = await getWebdavFileList(path)
-    currentPath.value = path
+    const r2Path = toR2Key(virtualPath)
+    const list = await getWebdavFileList(r2Path)
+    currentPath.value = virtualPath
     selectedPaths.value = []
-    const rows: EntryRow[] = path !== '/'
+    const rows: EntryRow[] = virtualPath !== '/'
       ? [{
           name: '..',
           size: 0,
-          path: toParentPath(path),
+          path: toParentPath(virtualPath),
           lastModified: 0,
           isDirectory: true,
           toParent: true,
@@ -295,7 +310,7 @@ async function loadFiles(path = '/') {
     const files: EntryRow[] = (list || []).map((f: any) => ({
       name: f.name,
       size: f.size,
-      path: f.key,
+      path: toVirtualPath(f.key),
       lastModified: f.uploaded,
       isDirectory: f.isDirectory === true,
     }))
@@ -344,7 +359,7 @@ async function handleUpload(event: Event) {
   try {
     await uploadFilesToWebdav(
       files.map((file) => ({ file, name: file.name })),
-      currentPath.value,
+      toR2Key(currentPath.value),
       (percent) => {
         uploadProgress.value = percent
       }
@@ -374,7 +389,7 @@ async function createBackup() {
     const filename = buildBackupFilename()
     await uploadFilesToWebdav(
       [{ file: blob, name: filename }],
-      '/backups',
+      toR2Key('/backups'),
     )
     appStore.showToast(`标准 ZIP 备份已保存: ${filename}`, 'success')
     await loadFiles('/backups')
@@ -416,7 +431,7 @@ async function handleLocalBackupFileChange(e: Event) {
 async function downloadEntry(entry: EntryRow) {
   working.value = true
   try {
-    const blob = await getWebdavFileBlob(entry.path)
+    const blob = await getWebdavFileBlob(toR2Key(entry.path))
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -431,7 +446,7 @@ async function downloadEntry(entry: EntryRow) {
   } catch {
     try {
       const { accessToken, secureKey } = buildAuthHeaderValues(localStorage)
-      const q = new URLSearchParams({ path: entry.path })
+      const q = new URLSearchParams({ path: toR2Key(entry.path) })
       if (accessToken) q.set('token', accessToken)
       if (secureKey) q.set('key', secureKey)
       window.open(`/reader3/getWebdavFile?${q.toString()}`, '_blank')
@@ -447,7 +462,7 @@ async function removeEntry(entry: EntryRow) {
   if (!confirm(`确定删除 ${entry.name} 吗？`)) return
   working.value = true
   try {
-    await deleteWebdavFile(entry.path)
+    await deleteWebdavFile(toR2Key(entry.path))
     appStore.showToast('文件已删除', 'success')
     await loadFiles(currentPath.value)
   } catch (error) {
@@ -462,7 +477,7 @@ async function removeSelected() {
   if (!confirm(`确定删除选中的 ${selectedPaths.value.length} 个项目吗？`)) return
   working.value = true
   try {
-    await deleteWebdavFileList(selectedPaths.value)
+    await deleteWebdavFileList(selectedPaths.value.map(toR2Key))
     appStore.showToast('选中文件已删除', 'success')
     await loadFiles(currentPath.value)
   } catch (error) {
@@ -517,7 +532,7 @@ async function importToShelf(entry: EntryRow) {
 
   working.value = true
   try {
-    const res = await importWebdavBook(entry.path, entry.name)
+    const res = await importWebdavBook(toR2Key(entry.path), entry.name)
     const msg = res?.moved
       ? `已将《${entry.name}》移动至 /book 目录并成功加入书架`
       : `已成功将《${entry.name}》导入至书架`
