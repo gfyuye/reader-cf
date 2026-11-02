@@ -17,7 +17,13 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   console.log(`[ImportBook] start path=${path}`);
 
   // 导入书架阶段：检查重名、转移文件、解析书籍、保存书架
-  const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+  let shelf: any[] = [];
+  try {
+    shelf = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+  } catch (shelfErr: any) {
+    console.log(`[ImportBook] get shelf error userNs=${userNs} err=${shelfErr.message || shelfErr}`);
+    return jsonResponse({ isSuccess: false, errorMsg: `读取书架失败：${shelfErr.message || shelfErr}` });
+  }
   const fileName = importName || path.split("/").pop() || path;
   const safeName = fileName.replace(/[/\\?%*:|"<>]/g, "_");
   const lowerName = safeName.toLowerCase();
@@ -217,8 +223,13 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   } else {
     shelf.unshift(newBook);
   }
-  await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
-  triggerOnChangeSync(env, userNs, ctx);
+  try {
+    await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
+    triggerOnChangeSync(env, userNs, ctx);
+  } catch (shelfErr: any) {
+    console.log(`[ImportBook] save shelf error bookId=${bookId} err=${shelfErr.message || shelfErr}`);
+    return jsonResponse({ isSuccess: false, errorMsg: `保存书架失败：${shelfErr.message || shelfErr}` });
+  }
 
   return jsonResponse({ isSuccess: true, data: newBook });
 }
