@@ -27,7 +27,7 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   // 检查书架中是否已有同名的本地书籍
   const existingIdx = shelf.findIndex((b) => b.name === fileName && (b.origin === "local-epub" || b.origin === "local-pdf" || b.origin === "local-txt"));
   if (existingIdx >= 0) {
-    return jsonResponse({ isSuccess: false, errorMsg: `书架中已存在同名书籍《${fileName}》，请先删除或重命名` });
+    return jsonResponse({ isSuccess: false, errorMsg: "书籍已存在" });
   }
 
   // 将文件从 WebDAV 路径移动到 book 文件夹
@@ -39,7 +39,7 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
   // 检查 book/ 目录下是否已有同名文件，避免覆盖
   const existingBookObj = await env.BUCKET.get(bookKey);
   if (existingBookObj) {
-    return jsonResponse({ isSuccess: false, errorMsg: `书籍已存在：《${safeName}》，请先删除或重命名` });
+    return jsonResponse({ isSuccess: false, errorMsg: "文件已存在于 book 文件夹下，请在该文件夹下导入书籍" });
   }
 
   const fileObj = await env.BUCKET.get(sourceKey);
