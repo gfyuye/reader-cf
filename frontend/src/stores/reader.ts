@@ -205,6 +205,7 @@ export const useReaderStore = defineStore('reader', () => {
   const bookmarks = ref<Bookmark[]>([])
   const replaceRules = ref<ReplaceRule[]>([])
   const preloadedContent = ref<Map<number, string>>(new Map()) // index -> content
+  const pendingRequests = new Map<number, Promise<string | null>>() // index -> in-flight request
   const isAutoScrolling = ref(false)
   const chapterScrollProgress = ref(0)
   const readChapterKeys = ref<Set<string>>(new Set())
@@ -437,7 +438,10 @@ export const useReaderStore = defineStore('reader', () => {
 
     const nextIndex = Math.max(0, Math.min(session.currentIndex || 0, session.chapters.length - 1))
     try {
-      await fetchChapterContent(nextIndex)
+      const content = await fetchChapterContent(nextIndex)
+      if (content) {
+        preloadedContent.value.set(nextIndex, content)
+      }
       return true
     } catch (e) {
       void e
@@ -1292,32 +1296,40 @@ export const useReaderStore = defineStore('reader', () => {
       return preloadedContent.value.get(index) || null
     }
 
-    const chapter = chapters.value[index]
-
-    const isLocal = isLocalBook(book.value)
-    const useBrowserCache = !isLocal
-    const browserCached = useBrowserCache
-      ? await getBrowserCachedChapter(book.value.bookUrl, chapter.url).catch(() => null)
-      : null
-
-    if (!forceRefresh && browserCached) {
-      return browserCached
+    // 避免同一章节的并发/重复请求
+    const inFlight = pendingRequests.get(index)
+    if (inFlight) {
+      return inFlight
     }
 
-    if (!appStore.isOnline && !isLocal) {
-      if (browserCached) {
-        return browserCached
-      }
-      throw new Error('当前处于离线状态，且该章节未缓存到浏览器')
-    }
+    const request = (async () => {
+      try {
+        const chapter = chapters.value[index]
 
-    try {
-      const result = await getBookContent({
-        chapterUrl: chapter.url,
-        bookSourceUrl: book.value.origin,
-        refresh: forceRefresh ? 1 : 0,
-      })
-      const chapterContent = result
+        const isLocal = isLocalBook(book.value)
+        const useBrowserCache = !isLocal
+        const browserCached = useBrowserCache
+          ? await getBrowserCachedChapter(book.value.bookUrl, chapter.url).catch(() => null)
+          : null
+
+        if (!forceRefresh && browserCached) {
+          return browserCached
+        }
+
+        if (!appStore.isOnline && !isLocal) {
+          if (browserCached) {
+            return browserCached
+          }
+          throw new Error('当前处于离线状态，且该章节未缓存到浏览器')
+        }
+
+        try {
+          const result = await getBookContent({
+            chapterUrl: chapter.url,
+            bookSourceUrl: book.value.origin,
+            refresh: forceRefresh ? 1 : 0,
+          })
+          const chapterContent = result
 
       if (useBrowserCache) {
         await setBrowserCachedChapter({
@@ -1328,14 +1340,22 @@ export const useReaderStore = defineStore('reader', () => {
         }).catch(() => undefined)
       }
 
+      preloadedContent.value.set(index, chapterContent)
       return chapterContent
-    } catch (error) {
-      if (browserCached) {
-        appStore.showToast('网络请求失败，已切换到本地缓存章节', 'warning')
-        return browserCached
+        } catch (error) {
+          if (browserCached) {
+            appStore.showToast('网络请求失败，已切换到本地缓存章节', 'warning')
+            return browserCached
+          }
+          throw error
+        }
+      } finally {
+        pendingRequests.delete(index)
       }
-      throw error
-    }
+    })()
+
+    pendingRequests.set(index, request)
+    return request
   }
 
   async function loadChapter(index: number, forceRefresh = false) {
