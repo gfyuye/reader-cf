@@ -21,12 +21,7 @@ export function logout() {
 
 export function getUserInfo() {
   return http
-    .get<{
-      userInfo: UserInfo | null
-      secure: boolean
-      secureKeyRequired: boolean
-      adminAuthorized: boolean
-    }>('/getUserInfo')
+    .get<UserInfo & { secure: boolean; secureKeyRequired: boolean; adminAuthorized: boolean }>('/getUserInfo')
     .then((r) => r.data)
 }
 
