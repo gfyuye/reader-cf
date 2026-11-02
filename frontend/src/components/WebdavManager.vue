@@ -192,11 +192,13 @@ const errorMessage = ref('')
 const userNs = computed(() => appStore.userInfo?.username || '')
 
 function toR2Key(virtualPath: string): string {
+  if (!userNs.value) throw new Error('未登录，无法访问 WebDAV')
   const clean = virtualPath.replace(/^\/+/, '');
   return clean ? `webdav/${userNs.value}/${clean}` : `webdav/${userNs.value}/`;
 }
 
 function toR2DirKey(virtualPath: string): string {
+  if (!userNs.value) throw new Error('未登录，无法访问 WebDAV')
   const clean = virtualPath.replace(/^\/+/, '').replace(/\/$/, '');
   return clean ? `webdav/${userNs.value}/${clean}/` : `webdav/${userNs.value}/`;
 }
