@@ -186,6 +186,29 @@ export async function handleReadRemoteSourceFile(request: Request, env: Env): Pr
 }
 
 export const DEFAULT_USER_NS = "__default__";
+const SYSTEM_NS = "system";
+const DEFAULT_OWNER_KEY = "default_book_source_owner";
+
+async function readDefaultOwner(env: Env): Promise<string | null> {
+  const row = await env.DB.prepare(
+    `SELECT json FROM json_documents WHERE namespace = ?1 AND name = ?2`
+  )
+    .bind(SYSTEM_NS, DEFAULT_OWNER_KEY)
+    .first<{ json: string }>();
+  if (!row) return null;
+  try {
+    return (JSON.parse(row.json) as { username?: string }).username || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function handleGetDefaultBookSourceOwner(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+  const owner = await readDefaultOwner(env);
+  return jsonResponse({ isSuccess: true, data: { username: owner || null } });
+}
 
 export async function handleSetAsDefaultBookSources(request: Request, env: Env): Promise<Response> {
   const userNs = await resolveUserNs(request, env);
@@ -200,17 +223,36 @@ export async function handleSetAsDefaultBookSources(request: Request, env: Env):
   const target = await env.DB.prepare(`SELECT 1 FROM users WHERE username = ?1`).bind(username).first();
   if (!target) return jsonResponse({ isSuccess: false, errorMsg: "用户不存在" });
 
-  // 清空旧的默认模板
+  const currentOwner = await readDefaultOwner(env);
+
+  // Toggle：若已是默认，则取消；否则设置为该用户
+  if (currentOwner === username) {
+    await env.DB.prepare(`DELETE FROM json_documents WHERE namespace = ?1 AND name = ?2`)
+      .bind(SYSTEM_NS, DEFAULT_OWNER_KEY)
+      .run();
+    await env.DB.prepare(`DELETE FROM book_sources WHERE user_ns = ?1`).bind(DEFAULT_USER_NS).run();
+    return jsonResponse({ isSuccess: true, data: `已取消 ${username} 的默认书源设置` });
+  }
+
+  // 设置 owner 元数据
+  const now = Math.floor(Date.now() / 1000);
+  await env.DB.prepare(
+    `INSERT INTO json_documents (namespace, name, json, updated_at)
+     VALUES (?1, ?2, ?3, ?4)
+     ON CONFLICT(namespace, name) DO UPDATE SET json=excluded.json, updated_at=excluded.updated_at`
+  )
+    .bind(SYSTEM_NS, DEFAULT_OWNER_KEY, JSON.stringify({ username }), now)
+    .run();
+
+  // 清空旧的默认模板，复制目标用户的书源到默认模板
   await env.DB.prepare(`DELETE FROM book_sources WHERE user_ns = ?1`).bind(DEFAULT_USER_NS).run();
 
-  // 复制目标用户的书源到默认模板
   const rows = await env.DB.prepare(
     `SELECT book_source_url, book_source_name, json, updated_at FROM book_sources WHERE user_ns = ?1`
   )
     .bind(username)
     .all<any>();
 
-  const now = Math.floor(Date.now() / 1000);
   const stmts = (rows.results || []).map((r) =>
     env.DB.prepare(
       `INSERT INTO book_sources (user_ns, book_source_url, book_source_name, json, updated_at)

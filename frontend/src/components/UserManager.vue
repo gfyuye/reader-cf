@@ -415,12 +415,13 @@ async function handleDeleteUser(user: UserInfo) {
 }
 
 async function handleSetDefaultBookSources(user: UserInfo) {
-  if (!confirm(`确定将用户 "${user.username}" 的书源设为默认书源吗？新注册用户将继承这套书源。`)) return
+  const isDefault = user.username === defaultBookSourceOwner.value
+  if (!confirm(`确定${isDefault ? '取消' : '将'}用户 "${user.username}" 的书源${isDefault ? '作为' : '设为'}默认书源吗？${!isDefault ? '新注册用户将继承这套书源。' : '取消后新用户将不再继承。'}`)) return
   working.value = true
   try {
     await setAsDefaultBookSources(user.username)
-    defaultBookSourceOwner.value = user.username
-    appStore.showToast(`已将 ${user.username} 的书源设为默认书源`, 'success')
+    await loadUsers()
+    appStore.showToast(`${isDefault ? '已取消' : '已将'} ${user.username} 的书源${isDefault ? '' : '设为'}默认书源`, 'success')
   } catch (error) {
     appStore.showToast((error as Error).message || '设置默认书源失败', 'error')
   } finally {
