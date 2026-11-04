@@ -34,8 +34,7 @@
             <span>{{ unavailableMessage }}</span>
           </div>
 
-          <template>
-            <section class="panel top-panel">
+          <section class="panel top-panel">
               <div class="panel-head compact-head">
                 <div>
                   <h3>总览</h3>
@@ -195,7 +194,6 @@
                 </article>
               </div>
             </section>
-          </template>
         </section>
       </div>
     </Transition>
@@ -329,11 +327,13 @@ async function loadUsers() {
       applyUserList(list)
       defaultBookSourceOwner.value = owner.username || ''
     } else {
-      // 未开启管理权限，只读取默认书源所有者（若可）
+      // 未开启管理权限，只读取默认书源所有者（若可），失败不影响列表展示
       try {
         const owner = await getDefaultBookSourceOwner()
         defaultBookSourceOwner.value = owner.username || ''
-      } catch {}
+      } catch {
+        defaultBookSourceOwner.value = ''
+      }
     }
   } catch (error) {
     appStore.showToast((error as Error).message || '加载用户列表失败', 'error')
