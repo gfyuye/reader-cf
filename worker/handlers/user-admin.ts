@@ -3,6 +3,7 @@ import { resolveUserNs, isAuthorizedAdmin } from "../auth";
 import { randomString } from "../utils";
 import * as cryptoUtils from "../crypto";
 import { Env } from "../types";
+import { DEFAULT_USER_NS } from "./book-source";
 
 async function handleChangePassword(request: Request, env: Env): Promise<Response> {
   const userNs = await resolveUserNs(request, env);
@@ -73,6 +74,23 @@ async function handleAddUser(request: Request, env: Env): Promise<Response> {
     `INSERT INTO users (username, password, salt, token, last_login_at, created_at, enable_webdav, enable_local_store, enable_ai_model, is_admin)
      VALUES (?1, ?2, ?3, '', ?4, ?4, 1, 1, 1, 0)`
   ).bind(username, encrypted, salt, now).run();
+
+  // 新用户继承默认书源模板
+  const defaultRows = await env.DB.prepare(
+    `SELECT book_source_url, book_source_name, json FROM book_sources WHERE user_ns = ?1`
+  )
+    .bind(DEFAULT_USER_NS)
+    .all<any>();
+  const inheritStmts = (defaultRows.results || []).map((r) =>
+    env.DB.prepare(
+      `INSERT INTO book_sources (user_ns, book_source_url, book_source_name, json, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5)
+       ON CONFLICT(user_ns, book_source_url) DO NOTHING`
+    ).bind(username, r.book_source_url, r.book_source_name, r.json, now)
+  );
+  for (let i = 0; i < inheritStmts.length; i += 50) {
+    await env.DB.batch(inheritStmts.slice(i, i + 50));
+  }
 
   return handleGetUserList(request, env);
 }

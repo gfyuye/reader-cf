@@ -1,5 +1,5 @@
 import { jsonResponse } from "../http";
-import { resolveUserNs } from "../auth";
+import { resolveUserNs, isAuthorizedAdmin } from "../auth";
 import { getEnv } from "../env";
 import { Env } from "../types";
 import * as documentHandlers from "../handlers/document";
@@ -185,4 +185,44 @@ export async function handleReadRemoteSourceFile(request: Request, env: Env): Pr
   return jsonResponse({ isSuccess: true, data: [JSON.stringify(sources)] });
 }
 
-// ==========================================
+export const DEFAULT_USER_NS = "__default__";
+
+export async function handleSetAsDefaultBookSources(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+  if (!(await isAuthorizedAdmin(request, env))) {
+    return jsonResponse({ isSuccess: false, errorMsg: "需要验证管理密码 (SecureKey)" });
+  }
+
+  const { username } = await request.json<{ username: string }>();
+  if (!username) return jsonResponse({ isSuccess: false, errorMsg: "缺少 username" });
+
+  const target = await env.DB.prepare(`SELECT 1 FROM users WHERE username = ?1`).bind(username).first();
+  if (!target) return jsonResponse({ isSuccess: false, errorMsg: "用户不存在" });
+
+  // 清空旧的默认模板
+  await env.DB.prepare(`DELETE FROM book_sources WHERE user_ns = ?1`).bind(DEFAULT_USER_NS).run();
+
+  // 复制目标用户的书源到默认模板
+  const rows = await env.DB.prepare(
+    `SELECT book_source_url, book_source_name, json, updated_at FROM book_sources WHERE user_ns = ?1`
+  )
+    .bind(username)
+    .all<any>();
+
+  const now = Math.floor(Date.now() / 1000);
+  const stmts = (rows.results || []).map((r) =>
+    env.DB.prepare(
+      `INSERT INTO book_sources (user_ns, book_source_url, book_source_name, json, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5)
+       ON CONFLICT(user_ns, book_source_url) DO UPDATE SET
+       book_source_name=excluded.book_source_name, json=excluded.json, updated_at=excluded.updated_at`
+    ).bind(DEFAULT_USER_NS, r.book_source_url, r.book_source_name, r.json, now)
+  );
+
+  for (let i = 0; i < stmts.length; i += 50) {
+    await env.DB.batch(stmts.slice(i, i + 50));
+  }
+
+  return jsonResponse({ isSuccess: true, data: `已将 ${username} 的书源设为默认书源 (${stmts.length} 项)` });
+}
