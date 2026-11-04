@@ -65,7 +65,7 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
     console.log(`[ImportBook] epub parsing start bookId=${bookId}`);
     try {
       // 直接从 sourceKey 解析（R2 range 读取，不占内存），不先 copy 到 bookKey
-      const { title, author, totalChapters } = await indexEpubIntoDatabase(env, userNs, bookId, fileName, sourceKey, fileSize);
+      const { title, author, totalChapters, chapters } = await indexEpubIntoDatabase(env, userNs, bookId, fileName, sourceKey, fileSize);
       console.log(`[ImportBook] epub parsing end bookId=${bookId} title=${title} author=${author} totalChapters=${totalChapters}`);
       const displayTitle = title || safeName.replace(/\.epub$/i, "");
       newBook = {
@@ -98,13 +98,25 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
         }
       }
 
-      await env.DB.prepare(
-        `INSERT INTO epub_books (book_id, user_ns, file_name, r2_key, file_size, status, total_chapters, parsed_chapters, title, author, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 'ready', ?6, ?6, ?7, ?8, ?9, ?10)
-         ON CONFLICT(book_id) DO UPDATE SET status='ready', total_chapters=excluded.total_chapters, parsed_chapters=excluded.parsed_chapters, updated_at=excluded.updated_at`
-      )
-        .bind(bookId, userNs, fileName, finalR2Key, fileSize, totalChapters, displayTitle, author || "未知作者", now, now)
-        .run();
+
+      // 写入 book_details（一本书一条 JSON）
+      const bookDetail = {
+        ...newBook,
+        bookId,
+        r2Key: finalR2Key,
+        fileSize,
+        updatedAt: now,
+        chapters: chapters.map((ch: any) => ({
+          index: ch.index,
+          title: ch.title,
+          url: `local-epub:${bookId}#${ch.index}`,
+          byteOffset: ch.byteOffset,
+          byteLength: ch.byteLength,
+          fileName: ch.fileName,
+          compressionMethod: ch.compressionMethod,
+        })),
+      };
+      await documentHandlers.saveBookDetail(env, userNs, bookId, bookDetail);
     } catch (err: any) {
       console.log(`[ImportBook] epub parsing error bookId=${bookId} err=${err.message || err}`);
       return jsonResponse({ isSuccess: false, errorMsg: `EPUB解析失败：${err.message || err}` });
@@ -146,6 +158,21 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
         totalChapterNum: totalPages,
         kind: "本地PDF",
       };
+
+      // 写入 book_details（一本书一条 JSON）
+      const pdfBookDetail = {
+        ...newBook,
+        bookId,
+        r2Key: finalR2Key,
+        fileSize,
+        updatedAt: now,
+        chapters: Array.from({ length: totalPages }, (_, i) => ({
+          index: i,
+          title: `第 ${i + 1} 页`,
+          url: `local-pdf:${bookId}#${i}`,
+        })),
+      };
+      await documentHandlers.saveBookDetail(env, userNs, bookId, pdfBookDetail);
     } catch (err: any) {
       console.log(`[ImportBook] pdf parsing error bookId=${bookId} err=${err.message || err}`);
       return jsonResponse({ isSuccess: false, errorMsg: `PDF解析失败：${err.message || err}` });
@@ -191,23 +218,22 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
       kind: "本地TXT",
       wordCount: `${Math.ceil(fileSize / 2)}字`,
     };
-    await env.DB.prepare(
-      `INSERT INTO txt_books (book_id, user_ns, file_name, r2_key, file_size, total_chapters, title, author, status, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '本地导入', 'ready', ?8, ?9)
-       ON CONFLICT(book_id) DO UPDATE SET file_size=excluded.file_size, total_chapters=excluded.total_chapters, title=excluded.title, updated_at=excluded.updated_at`
-    )
-      .bind(bookId, userNs, fileName, finalR2Key, fileSize, totalChapters, title, now, now)
-      .run();
-    const stmts = chapters.map((ch, idx) =>
-      env.DB.prepare(
-        `INSERT INTO txt_chapters (book_id, chapter_index, title, byte_offset, byte_length, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(book_id, chapter_index) DO UPDATE SET byte_offset=excluded.byte_offset, byte_length=excluded.byte_length`
-      ).bind(bookId, idx, ch.title, ch.offset, ch.length, now)
-    );
-    for (let i = 0; i < stmts.length; i += 50) {
-      await env.DB.batch(stmts.slice(i, i + 50));
-    }
+    // 写入 book_details（一本书一条 JSON）
+    const txtBookDetail = {
+      ...newBook,
+      bookId,
+      r2Key: finalR2Key,
+      fileSize,
+      updatedAt: now,
+      chapters: chapters.map((ch, i) => ({
+        index: i,
+        title: ch.title,
+        url: `local-txt:${bookId}#${i}`,
+        byteOffset: ch.offset,
+        byteLength: ch.length,
+      })),
+    };
+    await documentHandlers.saveBookDetail(env, userNs, bookId, txtBookDetail);
     } catch (err: any) {
       console.log(`[ImportBook] txt parsing error bookId=${bookId} err=${err.message || err}`);
       return jsonResponse({ isSuccess: false, errorMsg: `TXT解析失败：${err.message || err}` });

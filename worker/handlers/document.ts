@@ -84,3 +84,48 @@ export async function handleDeleteDocumentItems(request: Request, env: Env, name
   await saveDocument(env, userNs, name, filtered);
   return jsonResponse({ isSuccess: true, data: "" });
 }
+
+// ==========================================
+// Book Details (one JSON per book)
+// ==========================================
+
+export async function getBookDetail(env: Env, userNs: string, bookId: string): Promise<any | null> {
+  const row = await env.DB.prepare(`SELECT json FROM book_details WHERE book_id = ?1 AND user_ns = ?2`)
+    .bind(bookId, userNs)
+    .first<{ json: string }>();
+  if (!row || !row.json) return null;
+  try {
+    return JSON.parse(row.json);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveBookDetail(env: Env, userNs: string, bookId: string, data: any): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await env.DB.prepare(
+    `INSERT INTO book_details (book_id, user_ns, json, updated_at) VALUES (?1, ?2, ?3, ?4)
+     ON CONFLICT(book_id) DO UPDATE SET user_ns=excluded.user_ns, json=excluded.json, updated_at=excluded.updated_at`
+  )
+    .bind(bookId, userNs, JSON.stringify(data), now)
+    .run();
+}
+
+export async function deleteBookDetail(env: Env, userNs: string, bookId: string): Promise<void> {
+  await env.DB.prepare(`DELETE FROM book_details WHERE book_id = ?1 AND user_ns = ?2`)
+    .bind(bookId, userNs)
+    .run();
+}
+
+export async function listBookDetails(env: Env, userNs: string): Promise<any[]> {
+  const rows = await env.DB.prepare(`SELECT json FROM book_details WHERE user_ns = ?1 ORDER BY updated_at DESC`)
+    .bind(userNs)
+    .all<{ json: string }>();
+  const list: any[] = [];
+  for (const r of (rows.results || [])) {
+    try {
+      list.push(JSON.parse(r.json));
+    } catch {}
+  }
+  return list;
+}

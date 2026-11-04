@@ -122,25 +122,6 @@ export async function handleTxtUpload(request: Request, env: Env, ctx: Execution
     const title = fileName.replace(/\.txt$/i, "");
     const now = Math.floor(Date.now() / 1000);
 
-    await env.DB.prepare(
-      `INSERT INTO txt_books (book_id, user_ns, file_name, r2_key, file_size, total_chapters, title, author, status, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '本地导入', 'ready', ?8, ?9)
-       ON CONFLICT(book_id) DO UPDATE SET file_size=excluded.file_size, total_chapters=excluded.total_chapters, title=excluded.title, updated_at=excluded.updated_at`
-    )
-      .bind(bookId, userNs, fileName, r2Key, fileSize, totalChapters, title, now, now)
-      .run();
-
-    const stmts = chapters.map((ch, idx) =>
-      env.DB.prepare(
-        `INSERT INTO txt_chapters (book_id, chapter_index, title, byte_offset, byte_length, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(book_id, chapter_index) DO UPDATE SET byte_offset=excluded.byte_offset, byte_length=excluded.byte_length`
-      ).bind(bookId, idx, ch.title, ch.offset, ch.length, now)
-    );
-
-    for (let i = 0; i < stmts.length; i += 50) {
-      await env.DB.batch(stmts.slice(i, i + 50));
-    }
 
     const bookUrl = `local-txt:${bookId}`;
     const newBook = {
@@ -161,12 +142,29 @@ export async function handleTxtUpload(request: Request, env: Env, ctx: Execution
       wordCount: `${text.length}字`,
     };
 
+    // 写入 book_details（一本书一条 JSON：元数据 + 章节目录 + 进度）
+    const bookDetail = {
+      ...newBook,
+      bookId,
+      r2Key,
+      fileSize,
+      updatedAt: now,
+      chapters: chapters.map((ch, i) => ({
+        index: i,
+        title: ch.title,
+        url: `local-txt:${bookId}#${i}`,
+        byteOffset: ch.offset,
+        byteLength: ch.length,
+      })),
+    };
+    await documentHandlers.saveBookDetail(env, userNs, bookId, bookDetail);
+
     let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
-    const idx = shelf.findIndex(
+    const shelfIdx = shelf.findIndex(
       (b) => b.bookUrl === bookUrl || (b.name === newBook.name && b.origin === newBook.origin)
     );
-    if (idx >= 0) {
-      shelf[idx] = { ...shelf[idx], ...newBook, bookUrl: shelf[idx].bookUrl, durChapterTime: Date.now() };
+    if (shelfIdx >= 0) {
+      shelf[shelfIdx] = { ...shelf[shelfIdx], ...newBook, bookUrl: shelf[shelfIdx].bookUrl, durChapterTime: Date.now() };
     } else {
       shelf.unshift(newBook);
     }
@@ -183,9 +181,14 @@ export async function handleTxtUpload(request: Request, env: Env, ctx: Execution
   }
 }
 
-export async function handleTxtRead(bookId: string, chapterIndex: number, env: Env): Promise<Response> {
+export async function handleTxtRead(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+  const url = new URL(request.url);
+  const bookId = url.searchParams.get("bookId") || "";
+  const chapterIndex = parseInt(url.searchParams.get("index") || "0", 10);
   try {
-    const text = await readTxtChapterText(bookId, chapterIndex, env);
+    const text = await readTxtChapterText(bookId, chapterIndex, env, userNs);
     return new Response(text, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
@@ -197,27 +200,32 @@ export async function handleTxtRead(bookId: string, chapterIndex: number, env: E
   }
 }
 
-export async function readTxtChapterText(bookId: string, chapterIndex: number, env: Env): Promise<string> {
-  const chapter = await env.DB.prepare(
-    `SELECT c.byte_offset, c.byte_length, b.r2_key
-     FROM txt_chapters c
-     JOIN txt_books b ON c.book_id = b.book_id
-     WHERE c.book_id = ?1 AND c.chapter_index = ?2`
-  )
-    .bind(bookId, chapterIndex)
-    .first<{ byte_offset: number; byte_length: number; r2_key: string }>();
+export async function readTxtChapterText(bookId: string, chapterIndex: number, env: Env, userNs?: string): Promise<string> {
+  let byteOffset: number;
+  let byteLength: number;
+  let r2Key: string;
 
-  if (!chapter) throw new Error("未找到该 TXT 章节切片");
+  if (!userNs) throw new Error("缺少 userNs，无法读取 TXT 章节");
+  const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
+  if (!detail || !Array.isArray(detail.chapters)) {
+    throw new Error("未找到该 TXT 书籍章节目录，请重新导入");
+  }
+  const ch = detail.chapters[chapterIndex];
+  if (!ch) throw new Error("未找到该 TXT 章节切片");
+  byteOffset = ch.byteOffset ?? 0;
+  byteLength = ch.byteLength ?? 0;
+  r2Key = detail.r2Key;
+  if (!r2Key) throw new Error("未找到该 TXT 书籍 R2 存储地址");
 
-  const obj = await env.BUCKET.get(chapter.r2_key, {
-    range: { offset: chapter.byte_offset, length: chapter.byte_length },
+  const obj = await env.BUCKET.get(r2Key, {
+    range: { offset: byteOffset, length: byteLength },
   });
   let payload: Uint8Array | null = obj ? new Uint8Array(await obj.arrayBuffer()) : null;
 
   if (!payload) {
-    payload = await fallbackFetchFromRemoteWebdav(env, chapter.r2_key, {
-      offset: chapter.byte_offset,
-      length: chapter.byte_length,
+    payload = await fallbackFetchFromRemoteWebdav(env, r2Key, {
+      offset: byteOffset,
+      length: byteLength,
     });
   }
 
@@ -225,15 +233,13 @@ export async function readTxtChapterText(bookId: string, chapterIndex: number, e
   return new TextDecoder().decode(payload);
 }
 
-export async function handleTxtInfo(bookId: string, env: Env): Promise<Response> {
-  const book = await env.DB.prepare(
-    `SELECT book_id, file_name, title, author, total_chapters, file_size, status FROM txt_books WHERE book_id = ?1`
-  )
-    .bind(bookId)
-    .first();
-
-  if (!book) return jsonResponse({ isSuccess: false, errorMsg: "未找到该 TXT 书籍" });
-  return jsonResponse({ isSuccess: true, data: book });
+export async function handleTxtInfo(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+  const bookId = new URL(request.url).searchParams.get("bookId") || "";
+  const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
+  if (!detail) return jsonResponse({ isSuccess: false, errorMsg: "未找到该 TXT 书籍" });
+  return jsonResponse({ isSuccess: true, data: detail });
 }
 
 /**

@@ -49,14 +49,14 @@ export async function handleGetBookContent(request: Request, env: Env): Promise<
   // 0. TXT Book
   if (bookUrl.startsWith("local-txt:") || chapterUrl.startsWith("local-txt:")) {
     const rawId = (bookUrl || chapterUrl).split(":")[1].split("#")[0];
-    const text = await readTxtChapterText(rawId, index, env);
+    const text = await readTxtChapterText(rawId, index, env, userNs);
     return jsonResponse({ isSuccess: true, data: text });
   }
 
   // 1. EPUB Book
   if (bookUrl.startsWith("local-epub:") || chapterUrl.startsWith("local-epub:")) {
     const bookId = (bookUrl || chapterUrl).split(":")[1].split("#")[0];
-    const html = await readEpubChapterHtml(bookId, index, env);
+    const html = await readEpubChapterHtml(bookId, index, env, userNs);
     return jsonResponse({ isSuccess: true, data: html });
   }
 

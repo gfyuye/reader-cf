@@ -163,7 +163,7 @@ export async function handleEpubUpload(request: Request, env: Env): Promise<Resp
       httpMetadata: { contentType: "application/epub+zip" },
     });
 
-    const { title, author, totalChapters } = await indexEpubIntoDatabase(
+    const { title, author, totalChapters, chapters } = await indexEpubIntoDatabase(
       env,
       userNs,
       bookId,
@@ -173,6 +173,7 @@ export async function handleEpubUpload(request: Request, env: Env): Promise<Resp
     );
 
     const bookUrl = `local-epub:${bookId}`;
+    const now = Math.floor(Date.now() / 1000);
     const newBook = {
       name: title,
       author: author,
@@ -184,17 +185,36 @@ export async function handleEpubUpload(request: Request, env: Env): Promise<Resp
       durChapterIndex: 0,
       durChapterPos: 0,
       durChapterTitle: "第 1 节",
-      durChapterTime: Date.now(),
+      durChapterTime: now,
       totalChapterNum: totalChapters,
       kind: "本地EPUB",
     };
+
+    // 写入 book_details（一本书一条 JSON：元数据 + 章节目录 + 进度）
+    const bookDetail = {
+      ...newBook,
+      bookId,
+      r2Key,
+      fileSize,
+      updatedAt: now,
+      chapters: chapters.map((ch) => ({
+        index: ch.index,
+        title: ch.title,
+        url: `local-epub:${bookId}#${ch.index}`,
+        byteOffset: ch.byteOffset,
+        byteLength: ch.byteLength,
+        fileName: ch.fileName,
+        compressionMethod: ch.compressionMethod,
+      })),
+    };
+    await documentHandlers.saveBookDetail(env, userNs, bookId, bookDetail);
 
     let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
     const idx = shelf.findIndex(
       (b) => b.bookUrl === bookUrl || (b.name === newBook.name && b.origin === newBook.origin)
     );
     if (idx >= 0) {
-      shelf[idx] = { ...shelf[idx], ...newBook, bookUrl: shelf[idx].bookUrl, durChapterTime: Date.now() };
+      shelf[idx] = { ...shelf[idx], ...newBook, bookUrl: shelf[idx].bookUrl, durChapterTime: now };
     } else {
       shelf.unshift(newBook);
     }
@@ -209,9 +229,14 @@ export async function handleEpubUpload(request: Request, env: Env): Promise<Resp
   }
 }
 
-export async function handleEpubRead(bookId: string, chapterIndex: number, env: Env): Promise<Response> {
+export async function handleEpubRead(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+  const url = new URL(request.url);
+  const bookId = url.searchParams.get("bookId") || "";
+  const chapterIndex = parseInt(url.searchParams.get("page") || "0", 10);
   try {
-    const html = await readEpubChapterHtml(bookId, chapterIndex, env);
+    const html = await readEpubChapterHtml(bookId, chapterIndex, env, userNs);
     return new Response(html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
@@ -223,175 +248,93 @@ export async function handleEpubRead(bookId: string, chapterIndex: number, env: 
   }
 }
 
-export async function readEpubChapterHtml(bookId: string, chapterIndex: number, env: Env): Promise<string> {
-  const chapter = await env.DB.prepare(
-    `SELECT c.byte_offset, c.byte_length, c.compression_method, c.file_name, b.r2_key
-     FROM epub_chapters c
-     JOIN epub_books b ON c.book_id = b.book_id
-     WHERE c.book_id = ?1 AND c.chapter_index = ?2`
-  )
-    .bind(bookId, chapterIndex)
-    .first<{ byte_offset: number; byte_length: number; compression_method: number; file_name: string; r2_key: string }>();
+export async function readEpubChapterHtml(bookId: string, chapterIndex: number, env: Env, userNs?: string): Promise<string> {
+  let byteOffset: number;
+  let byteLength: number;
+  let compressionMethod: number;
+  let fileName: string;
+  let r2Key: string;
 
-  if (!chapter) throw new Error("章节尚未完成分片索引");
+  if (!userNs) throw new Error("缺少 userNs，无法读取 EPUB 章节");
+  const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
+  if (!detail || !Array.isArray(detail.chapters)) {
+    throw new Error("未找到该 EPUB 书籍章节目录，请重新导入");
+  }
+  const ch = detail.chapters[chapterIndex];
+  if (!ch) throw new Error("章节尚未完成分片索引");
+  byteOffset = ch.byteOffset ?? 0;
+  byteLength = ch.byteLength ?? 0;
+  compressionMethod = ch.compressionMethod ?? 0;
+  fileName = ch.fileName ?? "";
+  r2Key = detail.r2Key;
+  if (!r2Key) throw new Error("未找到该 EPUB 书籍 R2 存储地址");
 
-  const localHdrObj = await env.BUCKET.get(chapter.r2_key, {
-    range: { offset: chapter.byte_offset, length: 30 },
+  const localHdrObj = await env.BUCKET.get(r2Key, {
+    range: { offset: byteOffset, length: 30 },
   });
   if (!localHdrObj) throw new Error("无法读取章节本地头数据");
   const localHdrBytes = new Uint8Array(await localHdrObj.arrayBuffer());
-  const dataOffset = parseLocalHeaderDataOffset(localHdrBytes, chapter.byte_offset);
+  const dataOffset = parseLocalHeaderDataOffset(localHdrBytes, byteOffset);
 
-  const obj = await env.BUCKET.get(chapter.r2_key, {
-    range: { offset: dataOffset, length: chapter.byte_length },
+  const obj = await env.BUCKET.get(r2Key, {
+    range: { offset: dataOffset, length: byteLength },
   });
   let payload: Uint8Array | null = obj ? new Uint8Array(await obj.arrayBuffer()) : null;
 
   if (!payload) {
-    payload = await fallbackFetchFromRemoteWebdav(env, chapter.r2_key, {
+    payload = await fallbackFetchFromRemoteWebdav(env, r2Key, {
       offset: dataOffset,
-      length: chapter.byte_length,
+      length: byteLength,
     });
   }
 
   if (!payload) throw new Error("本地书籍不存在，请重新导入");
 
   let rawHtml = "";
-  if (chapter.compression_method === 0) {
+  if (compressionMethod === 0) {
     rawHtml = new TextDecoder().decode(payload);
-  } else if (chapter.compression_method === 8) {
+  } else if (compressionMethod === 8) {
     const stream = new Response(payload as unknown as BodyInit).body!.pipeThrough(new DecompressionStream("deflate-raw"));
     const buf = await new Response(stream).arrayBuffer();
     rawHtml = new TextDecoder().decode(buf);
   } else {
-    throw new Error(`不支持的压缩格式: ${chapter.compression_method}`);
+    throw new Error(`不支持的压缩格式: ${compressionMethod}`);
   }
 
-  const nextChapter = await env.DB.prepare(
-    `SELECT file_name FROM epub_chapters WHERE book_id = ?1 AND chapter_index = ?2`
-  ).bind(bookId, chapterIndex + 1).first<{ file_name: string }>();
+  const nextChapter = detail.chapters[chapterIndex + 1];
+  let nextFile = "";
+  let nextAnchor = "";
+  if (nextChapter) {
+    nextFile = nextChapter.fileName?.split("#")[0] || "";
+    nextAnchor = (nextFile === fileName && nextChapter.fileName?.includes("#"))
+      ? nextChapter.fileName.split("#")[1]
+      : "";
+  }
 
-  const currentFile = chapter.file_name?.split("#")[0] || "";
-  const nextFile = nextChapter?.file_name?.split("#")[0] || "";
-  const startAnchor = chapter.file_name?.includes("#") ? chapter.file_name.split("#")[1] : "";
-  const nextAnchor = (nextFile === currentFile && nextChapter?.file_name?.includes("#"))
-    ? nextChapter.file_name.split("#")[1]
-    : "";
+  const currentFile = fileName.split("#")[0] || "";
+  const startAnchor = fileName.includes("#") ? fileName.split("#")[1] : "";
 
   let html = sliceHtmlByAnchors(rawHtml, startAnchor, nextAnchor);
-  html = rewriteEpubHtmlAssets(html, bookId, chapter.file_name?.split("#")[0] || "");
+  html = rewriteEpubHtmlAssets(html, bookId, currentFile);
 
   return html;
 }
 
-export async function handleEpubStatus(bookId: string, env: Env): Promise<Response> {
-  const book = await env.DB.prepare(
-    `SELECT book_id, file_name, status, total_chapters, parsed_chapters, title, author FROM epub_books WHERE book_id = ?1`
-  )
-    .bind(bookId)
-    .first();
-  return jsonResponse({ isSuccess: true, data: book });
-}
-
-async function processEpubChunkWithBudget(
-  bookId: string,
-  startTime: number,
-  timeBudgetMs: number,
-  env: Env
-): Promise<{ needsMore: boolean }> {
-  const book = await env.DB.prepare(
-    `SELECT r2_key, file_size FROM epub_books WHERE book_id = ?1`
-  )
-    .bind(bookId)
-    .first<{ r2_key: string; file_size: number }>();
-  if (!book) return { needsMore: false };
-
-  const cp = await env.DB.prepare(
-    `SELECT last_processed_index, spine_json FROM epub_parse_checkpoints WHERE book_id = ?1`
-  )
-    .bind(bookId)
-    .first<{ last_processed_index: number; spine_json: string }>();
-  if (!cp) return { needsMore: false };
-
-  const spine: string[] = JSON.parse(cp.spine_json || "[]");
-  const total = spine.length;
-  let curIdx = cp.last_processed_index;
-
-  if (curIdx >= total) {
-    await markBookReady(bookId, total, env);
-    return { needsMore: false };
-  }
-
-  const tailSize = Math.min(65536, book.file_size);
-  const tailObj = await env.BUCKET.get(book.r2_key, {
-    range: { offset: book.file_size - tailSize, length: tailSize },
-  });
-  if (!tailObj) return { needsMore: false };
-  const tailBytes = new Uint8Array(await tailObj.arrayBuffer());
-  const eocd = findEOCD(tailBytes, book.file_size);
-  if (!eocd) return { needsMore: false };
-
-  const cdObj = await env.BUCKET.get(book.r2_key, {
-    range: { offset: eocd.cdOffset, length: eocd.cdSize },
-  });
-  if (!cdObj) return { needsMore: false };
-  const cdBytes = new Uint8Array(await cdObj.arrayBuffer());
-  const entries = parseCentralDirectory(cdBytes);
-  const entryMap = new Map(entries.map((e) => [e.fileName, e]));
-
-  while (curIdx < total) {
-    if (Date.now() - startTime >= timeBudgetMs) {
-      const now = Math.floor(Date.now() / 1000);
-      await env.DB.prepare(
-        `UPDATE epub_parse_checkpoints SET last_processed_index = ?1, updated_at = ?2 WHERE book_id = ?3`
-      ).bind(curIdx, now, bookId).run();
-      await env.DB.prepare(
-        `UPDATE epub_books SET parsed_chapters = ?1, updated_at = ?2 WHERE book_id = ?3`
-      ).bind(curIdx, now, bookId).run();
-      return { needsMore: true };
-    }
-
-    const path = spine[curIdx];
-    const entry = entryMap.get(path);
-    if (entry) {
-      const localHdrObj = await env.BUCKET.get(book.r2_key, {
-        range: { offset: entry.localHeaderOffset, length: 30 },
-      });
-      if (localHdrObj) {
-        const localHdrBytes = new Uint8Array(await localHdrObj.arrayBuffer());
-        const dataOffset = parseLocalHeaderDataOffset(localHdrBytes, entry.localHeaderOffset);
-        const now = Math.floor(Date.now() / 1000);
-
-        await env.DB.prepare(
-          `INSERT INTO epub_chapters (book_id, chapter_index, title, file_name, byte_offset, byte_length, uncompressed_length, compression_method, created_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-           ON CONFLICT(book_id, chapter_index) DO UPDATE SET byte_offset = excluded.byte_offset, byte_length = excluded.byte_length`
-        ).bind(
-          bookId,
-          curIdx,
-          `第 ${curIdx + 1} 节`,
-          path,
-          dataOffset,
-          entry.compressedSize,
-          entry.uncompressedSize,
-          entry.compressionMethod,
-          now
-        ).run();
-      }
-    }
-    curIdx++;
-  }
-
-  await markBookReady(bookId, total, env);
-  return { needsMore: false };
-}
-
-async function markBookReady(bookId: string, total: number, env: Env): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
-  await env.DB.prepare(
-    `UPDATE epub_books SET status = 'ready', parsed_chapters = ?1, updated_at = ?2 WHERE book_id = ?3`
-  ).bind(total, now, bookId).run();
-  await env.DB.prepare(`DELETE FROM epub_parse_checkpoints WHERE book_id = ?1`).bind(bookId).run();
+export async function handleEpubStatus(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+  const bookId = new URL(request.url).searchParams.get("bookId") || "";
+  const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
+  if (!detail) return jsonResponse({ isSuccess: false, errorMsg: "未找到该 EPUB 书籍" });
+  return jsonResponse({ isSuccess: true, data: {
+    book_id: detail.bookId,
+    file_name: detail.name,
+    status: detail.status || 'ready',
+    total_chapters: detail.totalChapterNum,
+    parsed_chapters: detail.totalChapterNum,
+    title: detail.name,
+    author: detail.author,
+  } });
 }
 
 // === ZIP / EPUB Helpers ===
@@ -684,21 +627,21 @@ export async function handleEpubAsset(request: Request, env: Env): Promise<Respo
 
   const targetPath = decodeURIComponent(rawPath).replace(/^\.?\//, "");
 
-  const book = await env.DB.prepare(
-    `SELECT r2_key, file_size FROM epub_books WHERE book_id = ?1`
-  ).bind(bookId).first<{ r2_key: string; file_size: number }>();
-  if (!book) return new Response("Book Not Found", { status: 404, headers: corsHeaders() });
+  const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
+  if (!detail) return new Response("Book Not Found", { status: 404, headers: corsHeaders() });
+  const r2Key = detail.r2Key;
+  const fileSize = detail.fileSize || 0;
 
-  const tailSize = Math.min(65536, book.file_size);
-  const tailObj = await env.BUCKET.get(book.r2_key, {
-    range: { offset: book.file_size - tailSize, length: tailSize },
+  const tailSize = Math.min(65536, fileSize);
+  const tailObj = await env.BUCKET.get(r2Key, {
+    range: { offset: fileSize - tailSize, length: tailSize },
   });
   if (!tailObj) return new Response("Failed to read R2", { status: 500, headers: corsHeaders() });
   const tailBytes = new Uint8Array(await tailObj.arrayBuffer());
-  const eocd = findEOCD(tailBytes, book.file_size);
+  const eocd = findEOCD(tailBytes, fileSize);
   if (!eocd) return new Response("EOCD Not Found", { status: 500, headers: corsHeaders() });
 
-  const cdObj = await env.BUCKET.get(book.r2_key, {
+  const cdObj = await env.BUCKET.get(r2Key, {
     range: { offset: eocd.cdOffset, length: eocd.cdSize },
   });
   if (!cdObj) return new Response("Central Directory Not Found", { status: 500, headers: corsHeaders() });
@@ -713,7 +656,7 @@ export async function handleEpubAsset(request: Request, env: Env): Promise<Respo
 
   if (!entry) return new Response("Asset Not Found", { status: 404, headers: corsHeaders() });
 
-  const imageBytes = await readZipEntryBytes(book.r2_key, entry, env);
+  const imageBytes = await readZipEntryBytes(r2Key, entry, env);
 
   let contentType = "application/octet-stream";
   const lower = entry.fileName.toLowerCase();
@@ -737,7 +680,7 @@ export async function indexEpubIntoDatabase(
   fileName: string,
   r2Key: string,
   fileSize: number
-): Promise<{ title: string; author: string; totalChapters: number }> {
+): Promise<{ title: string; author: string; totalChapters: number; chapters: Array<{ index: number; title: string; url: string; byteOffset: number; byteLength: number; fileName: string; compressionMethod: number }> }> {
   console.log(`[EpubIndex] start bookId=${bookId} r2Key=${r2Key} fileSize=${fileSize}`);
   const tailSize = Math.min(65536, fileSize);
   const tailObj = await env.BUCKET.get(r2Key, {
@@ -821,7 +764,7 @@ export async function indexEpubIntoDatabase(
   console.log(`[EpubIndex] TOC items=${tocItems.length} bookId=${bookId}`);
 
   const now = Math.floor(Date.now() / 1000);
-  const stmts = [];
+  const chapters: Array<{ index: number; title: string; url: string; byteOffset: number; byteLength: number; fileName: string; compressionMethod: number }> = [];
   let chapterIndex = 0;
 
   if (tocItems.length > 0) {
@@ -837,23 +780,15 @@ export async function indexEpubIntoDatabase(
         entry = entries.find((e) => e.fileName.endsWith("/" + baseName) || e.fileName === baseName);
       }
       if (entry) {
-        stmts.push(
-          env.DB.prepare(
-            `INSERT INTO epub_chapters (book_id, chapter_index, title, file_name, byte_offset, byte_length, uncompressed_length, compression_method, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-             ON CONFLICT(book_id, chapter_index) DO UPDATE SET title = excluded.title, byte_offset = excluded.byte_offset, byte_length = excluded.byte_length`
-          ).bind(
-            bookId,
-            chapterIndex++,
-            item.title,
-            item.href,
-            entry.localHeaderOffset,
-            entry.compressedSize,
-            entry.uncompressedSize,
-            entry.compressionMethod,
-            now
-          )
-        );
+        chapters.push({
+          index: chapterIndex++,
+          title: item.title,
+          url: item.href,
+          byteOffset: entry.localHeaderOffset,
+          byteLength: entry.compressedSize,
+          fileName: entry.fileName,
+          compressionMethod: entry.compressionMethod,
+        });
       }
     }
   } else {
@@ -869,47 +804,21 @@ export async function indexEpubIntoDatabase(
         entry = entries.find((e) => e.fileName.endsWith("/" + baseName) || e.fileName === baseName);
       }
       if (entry) {
-        stmts.push(
-          env.DB.prepare(
-            `INSERT INTO epub_chapters (book_id, chapter_index, title, file_name, byte_offset, byte_length, uncompressed_length, compression_method, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-             ON CONFLICT(book_id, chapter_index) DO UPDATE SET title = excluded.title, byte_offset = excluded.byte_offset, byte_length = excluded.byte_length`
-          ).bind(
-            bookId,
-            chapterIndex++,
-            `第 ${i + 1} 章`,
-            entry.fileName,
-            entry.localHeaderOffset,
-            entry.compressedSize,
-            entry.uncompressedSize,
-            entry.compressionMethod,
-            now
-          )
-        );
+        chapters.push({
+          index: chapterIndex++,
+          title: `第 ${i + 1} 章`,
+          url: entry.fileName,
+          byteOffset: entry.localHeaderOffset,
+          byteLength: entry.compressedSize,
+          fileName: entry.fileName,
+          compressionMethod: entry.compressionMethod,
+        });
       }
-    }
-  }
-
-  for (let i = 0; i < stmts.length; i += 50) {
-    await env.DB.batch(stmts.slice(i, i + 50));
-    if (i % 500 === 0) {
-      console.log(`[EpubIndex] inserted chapters ${i}/${stmts.length} bookId=${bookId}`);
     }
   }
 
   const totalChapters = chapterIndex || spinePaths.length;
 
-  console.log(`[EpubIndex] inserting epub_books bookId=${bookId} totalChapters=${totalChapters}`);
 
-  await env.DB.prepare(
-    `INSERT INTO epub_books (book_id, user_ns, file_name, r2_key, file_size, status, total_chapters, parsed_chapters, title, author, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, 'ready', ?6, ?6, ?7, ?8, ?9, ?10)
-     ON CONFLICT(book_id) DO UPDATE SET status='ready', total_chapters=excluded.total_chapters, parsed_chapters=excluded.parsed_chapters, updated_at=excluded.updated_at`
-  )
-    .bind(bookId, userNs, fileName, r2Key, fileSize, totalChapters, title, author, now, now)
-    .run();
-
-  console.log(`[EpubIndex] done bookId=${bookId} totalChapters=${totalChapters}`);
-
-  return { title, author, totalChapters };
+  return { title, author, totalChapters, chapters };
 }

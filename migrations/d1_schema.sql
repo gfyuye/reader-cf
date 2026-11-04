@@ -65,6 +65,15 @@ CREATE TABLE IF NOT EXISTS json_documents (
 
 CREATE INDEX IF NOT EXISTS idx_json_documents_namespace ON json_documents(namespace);
 
+CREATE TABLE IF NOT EXISTS book_details (
+    book_id TEXT PRIMARY KEY,
+    user_ns TEXT NOT NULL,
+    json TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_book_details_user_ns ON book_details(user_ns, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS ai_book_memories (
     user_ns TEXT NOT NULL,
     book_key TEXT NOT NULL,
@@ -75,104 +84,6 @@ CREATE TABLE IF NOT EXISTS ai_book_memories (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_book_memories_user_ns ON ai_book_memories(user_ns);
-
-CREATE TABLE IF NOT EXISTS epub_books (
-    book_id TEXT PRIMARY KEY,
-    user_ns TEXT NOT NULL,
-    file_name TEXT NOT NULL,
-    r2_key TEXT NOT NULL,
-    file_size INTEGER NOT NULL,
-    status TEXT NOT NULL DEFAULT 'uploaded',
-    total_chapters INTEGER NOT NULL DEFAULT 0,
-    parsed_chapters INTEGER NOT NULL DEFAULT 0,
-    title TEXT,
-    author TEXT,
-    cover_url TEXT,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_epub_books_user_ns ON epub_books(user_ns, updated_at DESC);
-
-CREATE TABLE IF NOT EXISTS epub_chapters (
-    book_id TEXT NOT NULL,
-    chapter_index INTEGER NOT NULL,
-    title TEXT NOT NULL,
-    file_name TEXT NOT NULL,
-    byte_offset INTEGER NOT NULL,
-    byte_length INTEGER NOT NULL,
-    uncompressed_length INTEGER NOT NULL,
-    compression_method INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    PRIMARY KEY (book_id, chapter_index)
-);
-
-CREATE INDEX IF NOT EXISTS idx_epub_chapters_book ON epub_chapters(book_id, chapter_index);
-
-CREATE TABLE IF NOT EXISTS epub_parse_checkpoints (
-    book_id TEXT PRIMARY KEY,
-    last_processed_index INTEGER NOT NULL DEFAULT 0,
-    spine_json TEXT NOT NULL DEFAULT '[]',
-    title_map_json TEXT NOT NULL DEFAULT '{}',
-    updated_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS pdf_books (
-    book_id TEXT PRIMARY KEY,
-    user_ns TEXT NOT NULL,
-    file_name TEXT NOT NULL,
-    r2_key TEXT NOT NULL,
-    file_size INTEGER NOT NULL,
-    total_pages INTEGER NOT NULL DEFAULT 0,
-    title TEXT,
-    author TEXT,
-    status TEXT NOT NULL DEFAULT 'ready',
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_pdf_books_user_ns ON pdf_books(user_ns, updated_at DESC);
-
-CREATE TABLE IF NOT EXISTS pdf_outlines (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    book_id TEXT NOT NULL,
-    title TEXT NOT NULL,
-    dest_page INTEGER NOT NULL DEFAULT 1,
-    level INTEGER NOT NULL DEFAULT 1,
-    FOREIGN KEY (book_id) REFERENCES pdf_books(book_id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_pdf_outlines_book ON pdf_outlines(book_id, dest_page);
-
-CREATE TABLE IF NOT EXISTS mobi_books (
-    book_id TEXT PRIMARY KEY,
-    user_ns TEXT NOT NULL,
-    file_name TEXT NOT NULL,
-    r2_key TEXT NOT NULL,
-    file_size INTEGER NOT NULL,
-    total_chapters INTEGER NOT NULL DEFAULT 0,
-    title TEXT,
-    author TEXT,
-    compression INTEGER NOT NULL DEFAULT 1,
-    status TEXT NOT NULL DEFAULT 'ready',
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_mobi_books_user_ns ON mobi_books(user_ns, updated_at DESC);
-
-CREATE TABLE IF NOT EXISTS mobi_chapters (
-    book_id TEXT NOT NULL,
-    chapter_index INTEGER NOT NULL,
-    title TEXT NOT NULL,
-    byte_offset INTEGER NOT NULL,
-    byte_length INTEGER NOT NULL,
-    compression INTEGER NOT NULL DEFAULT 1,
-    created_at INTEGER NOT NULL,
-    PRIMARY KEY (book_id, chapter_index)
-);
-
-CREATE INDEX IF NOT EXISTS idx_mobi_chapters_book ON mobi_chapters(book_id, chapter_index);
 
 CREATE TABLE IF NOT EXISTS user_remote_webdav (
     username TEXT PRIMARY KEY,
@@ -190,31 +101,3 @@ CREATE TABLE IF NOT EXISTS user_remote_webdav (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_remote_webdav_enabled ON user_remote_webdav(enabled);
-
-CREATE TABLE IF NOT EXISTS txt_books (
-    book_id TEXT PRIMARY KEY,
-    user_ns TEXT NOT NULL,
-    file_name TEXT NOT NULL,
-    r2_key TEXT NOT NULL,
-    file_size INTEGER NOT NULL,
-    total_chapters INTEGER NOT NULL DEFAULT 0,
-    title TEXT NOT NULL,
-    author TEXT NOT NULL DEFAULT '本地导入',
-    status TEXT NOT NULL DEFAULT 'ready',
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_txt_books_user_ns ON txt_books(user_ns, updated_at DESC);
-
-CREATE TABLE IF NOT EXISTS txt_chapters (
-    book_id TEXT NOT NULL,
-    chapter_index INTEGER NOT NULL,
-    title TEXT NOT NULL,
-    byte_offset INTEGER NOT NULL,
-    byte_length INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    PRIMARY KEY (book_id, chapter_index)
-);
-
-CREATE INDEX IF NOT EXISTS idx_txt_chapters_book ON txt_chapters(book_id, chapter_index);

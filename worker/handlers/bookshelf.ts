@@ -10,8 +10,8 @@ export async function handleGetBookshelf(request: Request, env: Env): Promise<Re
   const userNs = await resolveUserNs(request, env);
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
-  const shelfDoc = await documentHandlers.getDocument(env, userNs, "bookshelf.json");
-  return jsonResponse({ isSuccess: true, data: shelfDoc || [] });
+  const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+  return jsonResponse({ isSuccess: true, data: shelf });
 }
 
 export async function handleSaveBook(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -19,15 +19,45 @@ export async function handleSaveBook(request: Request, env: Env, ctx: ExecutionC
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
   const book = await request.json<any>();
-  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
-
-  const idx = shelf.findIndex((b) => b.bookUrl === book.bookUrl);
-  if (idx >= 0) {
-    shelf[idx] = { ...shelf[idx], ...book };
-  } else {
-    shelf.unshift(book);
+  if (!book.bookUrl) {
+    return jsonResponse({ isSuccess: false, errorMsg: "bookUrl required" });
   }
 
+  const bookId = book.bookId || extractBookId(book.bookUrl);
+  if (!bookId) {
+    return jsonResponse({ isSuccess: false, errorMsg: "无法解析 bookId" });
+  }
+
+  book.bookId = bookId;
+  book.updatedAt = Math.floor(Date.now() / 1000);
+
+  // 写入 book_details（一本书一条 JSON，含元数据+章节目录+进度）
+  await documentHandlers.saveBookDetail(env, userNs, bookId, book);
+
+  // 更新书架索引（轻量级列表）
+  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+  const shelfItem = {
+    bookId,
+    bookUrl: book.bookUrl,
+    name: book.name,
+    author: book.author,
+    origin: book.origin,
+    originName: book.originName,
+    coverUrl: book.coverUrl,
+    durChapterIndex: book.durChapterIndex,
+    durChapterPos: book.durChapterPos,
+    durChapterTitle: book.durChapterTitle,
+    durChapterTime: book.durChapterTime,
+    totalChapterNum: book.totalChapterNum,
+    kind: book.kind,
+    updatedAt: book.updatedAt,
+  };
+  const idx = shelf.findIndex((b) => b.bookId === bookId || b.bookUrl === book.bookUrl);
+  if (idx >= 0) {
+    shelf[idx] = { ...shelf[idx], ...shelfItem };
+  } else {
+    shelf.unshift(shelfItem);
+  }
   await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
   triggerOnChangeSync(env, userNs, ctx);
   return jsonResponse({ isSuccess: true, data: book });
@@ -38,17 +68,43 @@ export async function handleSaveBooks(request: Request, env: Env, ctx: Execution
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
   const newBooks = await request.json<any[]>();
-  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+  const now = Math.floor(Date.now() / 1000);
 
+  const shelfItems: any[] = [];
   for (const book of newBooks) {
-    const idx = shelf.findIndex((b) => b.bookUrl === book.bookUrl);
-    if (idx >= 0) {
-      shelf[idx] = { ...shelf[idx], ...book };
-    } else {
-      shelf.unshift(book);
-    }
+    if (!book.bookUrl) continue;
+    const bookId = book.bookId || extractBookId(book.bookUrl);
+    if (!bookId) continue;
+    book.bookId = bookId;
+    book.updatedAt = book.updatedAt || now;
+    await documentHandlers.saveBookDetail(env, userNs, bookId, book);
+    shelfItems.push({
+      bookId,
+      bookUrl: book.bookUrl,
+      name: book.name,
+      author: book.author,
+      origin: book.origin,
+      originName: book.originName,
+      coverUrl: book.coverUrl,
+      durChapterIndex: book.durChapterIndex,
+      durChapterPos: book.durChapterPos,
+      durChapterTitle: book.durChapterTitle,
+      durChapterTime: book.durChapterTime,
+      totalChapterNum: book.totalChapterNum,
+      kind: book.kind,
+      updatedAt: book.updatedAt,
+    });
   }
 
+  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+  for (const item of shelfItems) {
+    const idx = shelf.findIndex((b) => b.bookId === item.bookId || b.bookUrl === item.bookUrl);
+    if (idx >= 0) {
+      shelf[idx] = { ...shelf[idx], ...item };
+    } else {
+      shelf.unshift(item);
+    }
+  }
   await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
   triggerOnChangeSync(env, userNs, ctx);
   return jsonResponse({ isSuccess: true, data: "书架更新成功" });
@@ -62,6 +118,7 @@ export async function handleDeleteBook(request: Request, env: Env, ctx: Executio
     const body = await request.json<any>().catch(() => ({}));
     const bookUrl = body.bookUrl || body.url || "";
     const name = body.name || "";
+    const bookId = body.bookId || extractBookId(bookUrl);
 
     let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
     shelf = shelf.filter((b) => {
@@ -72,30 +129,9 @@ export async function handleDeleteBook(request: Request, env: Env, ctx: Executio
 
     await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
 
-    if (bookUrl.startsWith("local-epub:")) {
-      const bookId = bookUrl.split(":")[1]?.split("#")[0];
-      if (bookId) {
-        ctx.waitUntil(Promise.allSettled([
-          env.DB.prepare(`DELETE FROM epub_chapters WHERE book_id = ?1`).bind(bookId).run(),
-          env.DB.prepare(`DELETE FROM epub_books WHERE book_id = ?1`).bind(bookId).run(),
-        ]));
-      }
-    } else if (bookUrl.startsWith("local-txt:")) {
-      const bookId = bookUrl.split(":")[1]?.split("#")[0];
-      if (bookId) {
-        ctx.waitUntil(Promise.allSettled([
-          env.DB.prepare(`DELETE FROM txt_chapters WHERE book_id = ?1`).bind(bookId).run(),
-          env.DB.prepare(`DELETE FROM txt_books WHERE book_id = ?1`).bind(bookId).run(),
-        ]));
-      }
-    } else if (bookUrl.startsWith("local-pdf:")) {
-      const bookId = bookUrl.split(":")[1]?.split("#")[0];
-      if (bookId) {
-        ctx.waitUntil(Promise.allSettled([
-          env.DB.prepare(`DELETE FROM pdf_outlines WHERE book_id = ?1`).bind(bookId).run(),
-          env.DB.prepare(`DELETE FROM pdf_books WHERE book_id = ?1`).bind(bookId).run(),
-        ]));
-      }
+    // 删除 book_details
+    if (bookId) {
+      await documentHandlers.deleteBookDetail(env, userNs, bookId);
     }
 
     triggerOnChangeSync(env, userNs, ctx);
@@ -118,34 +154,19 @@ export async function handleDeleteBooks(request: Request, env: Env, ctx: Executi
 
     await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
 
-    // 清理 D1 表记录
+    // 清理 book_details 和格式表
     const bookIds = list.map((b) => {
       const bookUrl = typeof b === "string" ? b : b.bookUrl || b.url;
+      const bookId = typeof b === "string" ? null : b.bookId;
       if (!bookUrl) return null;
-      if (bookUrl.startsWith("local-epub:")) return { bookId: bookUrl.split(":")[1]?.split("#")[0], type: "epub" };
-      if (bookUrl.startsWith("local-txt:")) return { bookId: bookUrl.split(":")[1]?.split("#")[0], type: "txt" };
-      if (bookUrl.startsWith("local-pdf:")) return { bookId: bookUrl.split(":")[1]?.split("#")[0], type: "pdf" };
-      return null;
+      return { bookId: bookId || extractBookId(bookUrl), bookUrl };
     }).filter(Boolean);
 
     if (bookIds.length > 0) {
       const stmts: any[] = [];
       for (const item of bookIds) {
-        if (item.type === "epub") {
-          stmts.push(
-            env.DB.prepare(`DELETE FROM epub_chapters WHERE book_id = ?1`).bind(item.bookId).run(),
-            env.DB.prepare(`DELETE FROM epub_books WHERE book_id = ?1`).bind(item.bookId).run()
-          );
-        } else if (item.type === "txt") {
-          stmts.push(
-            env.DB.prepare(`DELETE FROM txt_chapters WHERE book_id = ?1`).bind(item.bookId).run(),
-            env.DB.prepare(`DELETE FROM txt_books WHERE book_id = ?1`).bind(item.bookId).run()
-          );
-        } else if (item.type === "pdf") {
-          stmts.push(
-            env.DB.prepare(`DELETE FROM pdf_outlines WHERE book_id = ?1`).bind(item.bookId).run(),
-            env.DB.prepare(`DELETE FROM pdf_books WHERE book_id = ?1`).bind(item.bookId).run()
-          );
+        if (item.bookId) {
+          stmts.push(env.DB.prepare(`DELETE FROM book_details WHERE book_id = ?1 AND user_ns = ?2`).bind(item.bookId, userNs).run());
         }
       }
       if (stmts.length > 0) {
@@ -166,26 +187,42 @@ export async function handleSaveBookProgress(request: Request, env: Env, ctx: Ex
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
   const progress = await request.json<any>();
-  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
-
   const targetUrl = progress.bookUrl || progress.url;
-  const idx = shelf.findIndex((b) => b.bookUrl === targetUrl);
+  const bookId = progress.bookId || extractBookId(targetUrl);
+  if (!bookId) {
+    return jsonResponse({ isSuccess: false, errorMsg: "缺少 bookId" });
+  }
+
+  const durChapterIndex = progress.durChapterIndex !== undefined ? progress.durChapterIndex : progress.index;
+  const durChapterPos = progress.durChapterPos !== undefined ? progress.durChapterPos : progress.position;
+  const durChapterTitle = progress.durChapterTitle;
+  const durChapterTime = progress.durChapterTime || Date.now();
+
+  // 更新 book_details 中的进度
+  const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
+  if (detail) {
+    if (durChapterIndex !== undefined) detail.durChapterIndex = durChapterIndex;
+    if (durChapterPos !== undefined) detail.durChapterPos = durChapterPos;
+    if (durChapterTitle) detail.durChapterTitle = durChapterTitle;
+    detail.durChapterTime = durChapterTime;
+    await documentHandlers.saveBookDetail(env, userNs, bookId, detail);
+  }
+
+  // 同步更新书架索引
+  let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
+  const idx = shelf.findIndex((b) => b.bookId === bookId || b.bookUrl === targetUrl);
   if (idx >= 0) {
-    const durChapterIndex = progress.durChapterIndex !== undefined ? progress.durChapterIndex : progress.index;
-    const durChapterPos = progress.durChapterPos !== undefined ? progress.durChapterPos : progress.position;
-    const durChapterTitle = progress.durChapterTitle || shelf[idx].durChapterTitle;
-    const durChapterTime = progress.durChapterTime || Date.now();
     shelf[idx] = {
       ...shelf[idx],
       durChapterIndex: durChapterIndex !== undefined ? durChapterIndex : shelf[idx].durChapterIndex,
-      durChapterTitle,
       durChapterPos: durChapterPos !== undefined ? durChapterPos : shelf[idx].durChapterPos,
+      durChapterTitle: durChapterTitle || shelf[idx].durChapterTitle,
       durChapterTime,
     };
     await documentHandlers.saveDocument(env, userNs, "bookshelf.json", shelf);
-    triggerOnChangeSync(env, userNs, ctx);
   }
 
+  triggerOnChangeSync(env, userNs, ctx);
   return jsonResponse({ isSuccess: true, data: "进度已同步" });
 }
 
@@ -242,12 +279,26 @@ export async function handleSetBookSource(request: Request, env: Env): Promise<R
 
   const body = await request.json<any>();
   const { bookUrl, bookSourceUrl } = body;
-    if (!bookUrl || !bookSourceUrl) {
+  if (!bookUrl || !bookSourceUrl) {
     return jsonResponse({ isSuccess: false, errorMsg: "缺少bookurl 1" });
   }
 
+  const bookId = extractBookId(bookUrl);
+
+  // 更新 book_details
+  if (bookId) {
+    const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
+    if (detail) {
+      detail.bookSourceUrl = bookSourceUrl;
+      detail.source = bookSourceUrl;
+      detail.origin = bookSourceUrl;
+      await documentHandlers.saveBookDetail(env, userNs, bookId, detail);
+    }
+  }
+
+  // 更新书架索引
   let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
-  const idx = shelf.findIndex((b) => b.bookUrl === bookUrl);
+  const idx = shelf.findIndex((b) => b.bookUrl === bookUrl || b.bookId === bookId);
   if (idx < 0) {
     return jsonResponse({ isSuccess: false, errorMsg: "书架中未找到该书籍" });
   }
@@ -266,8 +317,20 @@ export async function handleSaveBookGroupId(request: Request, env: Env, ctx: Exe
     return jsonResponse({ isSuccess: false, errorMsg: "缺少bookurl 2" });
   }
 
+  const bookId = extractBookId(bookUrl);
+
+  // 更新 book_details
+  if (bookId) {
+    const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
+    if (detail) {
+      detail.groupId = groupId;
+      await documentHandlers.saveBookDetail(env, userNs, bookId, detail);
+    }
+  }
+
+  // 更新书架索引
   let shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
-  const idx = shelf.findIndex((b) => b.bookUrl === bookUrl);
+  const idx = shelf.findIndex((b) => b.bookUrl === bookUrl || b.bookId === bookId);
   if (idx < 0) {
     return jsonResponse({ isSuccess: false, errorMsg: "书架中未找到该书籍" });
   }
@@ -283,12 +346,23 @@ export async function handleGetShelfBook(request: Request, env: Env): Promise<Re
 
   const url = new URL(request.url);
   const bookUrl = url.searchParams.get("bookUrl") || url.searchParams.get("url") || "";
-  if (!bookUrl) {
-    return jsonResponse({ isSuccess: false, errorMsg: "缺少bookurl 3" });
+  const bookId = url.searchParams.get("bookId") || "";
+  if (!bookUrl && !bookId) {
+    return jsonResponse({ isSuccess: false, errorMsg: "缺少bookurl或bookId" });
   }
 
+  // 优先从 book_details 读取完整详情
+  const bid = bookId || extractBookId(bookUrl);
+  if (bid) {
+    const detail = await documentHandlers.getBookDetail(env, userNs, bid);
+    if (detail) {
+      return jsonResponse({ isSuccess: true, data: detail });
+    }
+  }
+
+  // Fallback to bookshelf index
   const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
-  const book = shelf.find((b) => b.bookUrl === bookUrl || b.url === bookUrl);
+  const book = shelf.find((b) => b.bookUrl === bookUrl || b.url === bookUrl || b.bookId === bookId);
   if (!book) {
     return jsonResponse({ isSuccess: false, errorMsg: "书架中未找到该书籍" });
   }
@@ -349,6 +423,7 @@ export async function handleGetBookInfo(request: Request, env: Env): Promise<Res
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
   let url = new URL(request.url).searchParams.get("url") || "";
+  const bookId = new URL(request.url).searchParams.get("bookId") || "";
   if (!url && request.method === "POST") {
     try {
       const body = await request.json<any>();
@@ -356,41 +431,15 @@ export async function handleGetBookInfo(request: Request, env: Env): Promise<Res
     } catch {}
   }
 
-  if (url.startsWith("local-txt:")) {
-    const bookId = url.split(":")[1].split("#")[0];
-    const info = await env.DB.prepare(`SELECT * FROM txt_books WHERE book_id = ?1`).bind(bookId).first<any>();
-    if (info) {
-      return jsonResponse({
-        isSuccess: true,
-        data: {
-          name: info.title,
-          author: info.author,
-          bookUrl: url,
-          totalChapterNum: info.total_chapters,
-          origin: "local-txt",
-          originName: "本地 TXT",
-        },
-      });
+  // 优先从 book_details 读取完整详情
+  const bid = bookId || extractBookId(url);
+  if (bid) {
+    const detail = await documentHandlers.getBookDetail(env, userNs, bid);
+    if (detail) {
+      return jsonResponse({ isSuccess: true, data: detail });
     }
   }
 
-  if (url.startsWith("local-epub:")) {
-    const bookId = url.split(":")[1].split("#")[0];
-    const info = await env.DB.prepare(`SELECT * FROM epub_books WHERE book_id = ?1`).bind(bookId).first<any>();
-    if (info) {
-      return jsonResponse({
-        isSuccess: true,
-        data: {
-          name: info.title || info.file_name,
-          author: info.author || "未知作者",
-          bookUrl: url,
-          totalChapterNum: info.total_chapters,
-          origin: "local-epub",
-          originName: "本地 EPUB",
-        },
-      });
-    }
-  }
 
   // Fallback to bookshelf
   const shelf: any[] = (await documentHandlers.getDocument(env, userNs, "bookshelf.json")) || [];
@@ -418,26 +467,28 @@ export async function handleGetChapterList(request: Request, env: Env): Promise<
   const cleanTarget = decodeURIComponent(targetUrl);
   const fileNameCandidate = cleanTarget.split("/").pop()?.split("#")[0]?.trim() || "";
 
-  // 1. Local TXT Chapters
-  if (targetUrl.startsWith("local-txt:") || cleanTarget.toLowerCase().includes(".txt")) {
-    let bookId = targetUrl.startsWith("local-txt:") ? targetUrl.split(":")[1].split("#")[0] : "";
-    if (!bookId) {
-      const row = await env.DB.prepare(
-        `SELECT book_id FROM txt_books WHERE user_ns = ?1 AND (file_name = ?2 OR title = ?3) LIMIT 1`
-      ).bind(userNs, fileNameCandidate, bookName).first<{ book_id: string }>();
-      bookId = row?.book_id || "";
-    }
-
+  // 1. Local books: read chapters from book_details JSON (one book, one JSON)
+  if (targetUrl.startsWith("local-txt:") || targetUrl.startsWith("local-epub:") || targetUrl.startsWith("local-pdf:")) {
+    const bookId = targetUrl.split(":")[1]?.split("#")[0] || "";
     if (bookId) {
-      const rows = await env.DB.prepare(
-        `SELECT chapter_index, title FROM txt_chapters WHERE book_id = ?1 ORDER BY chapter_index ASC`
-      ).bind(bookId).all<{ chapter_index: number; title: string }>();
-
-      if (rows.results && rows.results.length > 0) {
-        const chapters = rows.results.map((r) => ({
-          index: r.chapter_index,
-          title: r.title,
-          url: `local-txt:${bookId}#${r.chapter_index}`,
+      const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
+      if (detail && Array.isArray(detail.chapters) && detail.chapters.length > 0) {
+        const chapters = detail.chapters.map((ch: any, i: number) => ({
+          index: ch.index ?? i,
+          title: ch.title,
+          url: ch.url || (`local-${detail.kind?.includes("TXT") ? "txt" : detail.kind?.includes("EPUB") ? "epub" : "pdf"}:${bookId}#${ch.index ?? i}`),
+          byteOffset: ch.byteOffset,
+          byteLength: ch.byteLength,
+        }));
+        return jsonResponse({ isSuccess: true, data: chapters });
+      }
+      // PDF: generate page list from totalChapterNum
+      if (targetUrl.startsWith("local-pdf:") && detail) {
+        const count = Math.max(1, detail.totalChapterNum || 1);
+        const chapters = Array.from({ length: count }, (_, i) => ({
+          index: i,
+          title: `第 ${i + 1} 页`,
+          url: `local-pdf:${bookId}#${i}`,
         }));
         return jsonResponse({ isSuccess: true, data: chapters });
       }
@@ -445,55 +496,14 @@ export async function handleGetChapterList(request: Request, env: Env): Promise<
     return jsonResponse({ isSuccess: false, errorMsg: "书籍不存在，请重新上传" });
   }
 
-  // 2. Local EPUB Chapters
-  if (targetUrl.startsWith("local-epub:") || cleanTarget.toLowerCase().includes(".epub")) {
-    let bookId = targetUrl.startsWith("local-epub:") ? targetUrl.split(":")[1].split("#")[0] : "";
-    if (!bookId) {
-      const row = await env.DB.prepare(
-        `SELECT book_id FROM epub_books WHERE user_ns = ?1 AND (file_name = ?2 OR title = ?3) LIMIT 1`
-      ).bind(userNs, fileNameCandidate, bookName).first<{ book_id: string }>();
-      bookId = row?.book_id || "";
-    }
-
-    if (bookId) {
-      const rows = await env.DB.prepare(
-        `SELECT chapter_index, title FROM epub_chapters WHERE book_id = ?1 ORDER BY chapter_index ASC`
-      ).bind(bookId).all<{ chapter_index: number; title: string }>();
-
-      if (rows.results && rows.results.length > 0) {
-        const chapters = rows.results.map((r) => ({
-          index: r.chapter_index,
-          title: r.title,
-          url: `local-epub:${bookId}#${r.chapter_index}`,
-        }));
-        return jsonResponse({ isSuccess: true, data: chapters });
-      }
-    }
-    return jsonResponse({ isSuccess: false, errorMsg: "书籍不存在，请重新上传" });
-  }
-
-  // 3. Local PDF Pages
-  if (targetUrl.startsWith("local-pdf:") || cleanTarget.toLowerCase().includes(".pdf")) {
-    let bookId = targetUrl.startsWith("local-pdf:") ? targetUrl.split(":")[1]?.split("#")[0] : "";
-    if (!bookId) {
-      const row = await env.DB.prepare(
-        `SELECT book_id FROM pdf_books WHERE user_ns = ?1 AND (file_name = ?2 OR title = ?3) LIMIT 1`
-      ).bind(userNs, fileNameCandidate, bookName).first<{ book_id: string }>();
-      bookId = row?.book_id || "";
-    }
-
-    if (bookId) {
-      const book = await env.DB.prepare(`SELECT total_pages FROM pdf_books WHERE book_id = ?1`).bind(bookId).first<{ total_pages: number }>();
-      const count = Math.max(1, book?.total_pages || 1);
-      const chapters = Array.from({ length: count }, (_, i) => ({
-        index: i,
-        title: `第 ${i + 1} 页`,
-        url: `local-pdf:${bookId}#${i}`,
-      }));
-      return jsonResponse({ isSuccess: true, data: chapters });
-    }
-    return jsonResponse({ isSuccess: false, errorMsg: "书籍不存在，请重新上传" });
-  }
 
   return jsonResponse({ isSuccess: true, data: [] });
+}
+
+function extractBookId(bookUrl: string): string | null {
+  if (!bookUrl) return null;
+  const m = bookUrl.match(/^local-(txt|epub|pdf):([^#]+)/);
+  if (m) return m[2];
+  // 在线书源：用 bookUrl 本身作为 bookId
+  return bookUrl;
 }

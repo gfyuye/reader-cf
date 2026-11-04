@@ -610,13 +610,12 @@ export async function syncUserToRemoteWebdav(env: Env, username: string): Promis
       await remoteWebdavPutFile(cleanBase, authHeader, relPath, content, "application/json;charset=utf-8");
     }
 
-    // Mirror user R2 storage objects (assets, epubs, pdfs, mobis, webdav)
+    // Mirror user R2 storage objects (assets, epubs, pdfs, webdav)
     const prefixes = [
       `assets/${username}/`,
       `txts/${username}/`,
       `epubs/${username}/`,
       `pdfs/${username}/`,
-      `mobis/${username}/`,
       `webdav/${username}/`,
     ];
 

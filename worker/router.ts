@@ -124,12 +124,10 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
     // 8. EPUB Streaming & Indexing
     // ==========================================
     if (path === "/reader3/epub/read" && request.method === "GET") {
-      const bookId = url.searchParams.get("bookId") || "";
-      const pageIndex = parseInt(url.searchParams.get("page") || "0", 10);
-      return epubHandlers.handleEpubRead(bookId, pageIndex, env);
+      return epubHandlers.handleEpubRead(request, env);
     }
     if (path === "/reader3/epub/status" && request.method === "GET") {
-      return epubHandlers.handleEpubStatus(url.searchParams.get("bookId") || "", env);
+      return epubHandlers.handleEpubStatus(request, env);
     }
     if (path === "/reader3/epub/asset" && request.method === "GET") {
       return epubHandlers.handleEpubAsset(request, env);
@@ -139,19 +137,17 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
     // 9. PDF Streaming & TOC
     // ==========================================
     if (path === "/reader3/pdf/stream" && request.method === "GET") return pdfHandlers.handlePdfStream(request, env);
-    if (path === "/reader3/pdf/info" && request.method === "GET") return pdfHandlers.handlePdfInfo(url.searchParams.get("bookId") || "", env);
-    if (path === "/reader3/pdf/toc" && request.method === "GET") return pdfHandlers.handlePdfToc(url.searchParams.get("bookId") || "", env);
+    if (path === "/reader3/pdf/info" && request.method === "GET") return pdfHandlers.handlePdfInfo(request, env);
+    if (path === "/reader3/pdf/toc" && request.method === "GET") return pdfHandlers.handlePdfToc(request, env);
 
     // ==========================================
     // 10. TXT Streaming & Heading Indexing
     // ==========================================
     if (path === "/reader3/txt/read" && request.method === "GET") {
-      const bookId = url.searchParams.get("bookId") || "";
-      const chapterIndex = parseInt(url.searchParams.get("index") || "0", 10);
-      return txtHandlers.handleTxtRead(bookId, chapterIndex, env);
+      return txtHandlers.handleTxtRead(request, env);
     }
     if (path === "/reader3/txt/info" && request.method === "GET") {
-      return txtHandlers.handleTxtInfo(url.searchParams.get("bookId") || "", env);
+      return txtHandlers.handleTxtInfo(request, env);
     }
 
     // ==========================================
