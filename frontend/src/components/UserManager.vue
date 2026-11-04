@@ -34,7 +34,7 @@
             <span>{{ unavailableMessage }}</span>
           </div>
 
-          <template v-else>
+          <template>
             <section class="panel top-panel">
               <div class="panel-head compact-head">
                 <div>
@@ -133,7 +133,7 @@
                       <button
                         class="mini-btn"
                         :class="{ active: !!user.enableWebdav }"
-                        :disabled="working"
+                        :disabled="working || !canManageUsers"
                         @click="handleTogglePermission(user, 'enableWebdav', !user.enableWebdav)"
                       >
                         服务器备份
@@ -141,7 +141,7 @@
                       <button
                         class="mini-btn"
                         :class="{ active: !!user.enableLocalStore }"
-                        :disabled="working"
+                        :disabled="working || !canManageUsers"
                         @click="handleTogglePermission(user, 'enableLocalStore', !user.enableLocalStore)"
                       >
                         本地存储
@@ -149,7 +149,7 @@
                       <button
                         class="mini-btn"
                         :class="{ active: !!user.enableAiModel }"
-                        :disabled="working"
+                        :disabled="working || !canManageUsers"
                         @click="handleTogglePermission(user, 'enableAiModel', !user.enableAiModel)"
                       >
                         AI模型
@@ -277,7 +277,7 @@ const unavailableMessage = computed(() => {
 watch(
   () => props.modelValue,
   (visible) => {
-    if (visible && canManageUsers.value) {
+    if (visible) {
       void loadUsers()
     }
     if (!visible) {
@@ -319,15 +319,22 @@ function applyUserList(list: UserInfo[]) {
 }
 
 async function loadUsers() {
-  if (!canManageUsers.value) return
   loading.value = true
   try {
-    const [list, owner] = await Promise.all([
-      getUserList(),
-      getDefaultBookSourceOwner().catch(() => ({ username: null })),
-    ])
-    applyUserList(list)
-    defaultBookSourceOwner.value = owner.username || ''
+    if (canManageUsers.value) {
+      const [list, owner] = await Promise.all([
+        getUserList(),
+        getDefaultBookSourceOwner().catch(() => ({ username: null })),
+      ])
+      applyUserList(list)
+      defaultBookSourceOwner.value = owner.username || ''
+    } else {
+      // 未开启管理权限，只读取默认书源所有者（若可）
+      try {
+        const owner = await getDefaultBookSourceOwner()
+        defaultBookSourceOwner.value = owner.username || ''
+      } catch {}
+    }
   } catch (error) {
     appStore.showToast((error as Error).message || '加载用户列表失败', 'error')
   } finally {
