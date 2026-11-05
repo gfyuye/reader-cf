@@ -156,7 +156,7 @@
                       <button
                         class="mini-btn"
                         :class="{ active: user.username === defaultBookSourceOwner }"
-                        :disabled="working || !canManageUsers"
+                        :disabled="working"
                         @click="handleSetDefaultBookSources(user)"
                       >
                         默认书源
@@ -423,7 +423,6 @@ async function handleDeleteUser(user: UserInfo) {
 }
 
 async function handleSetDefaultBookSources(user: UserInfo) {
-  if (!canManageUsers.value) return
   const isDefault = user.username === defaultBookSourceOwner.value
   if (!confirm(`确定${isDefault ? '取消' : '将'}用户 "${user.username}" 的书源${isDefault ? '作为' : '设为'}默认书源吗？${!isDefault ? '新注册用户将继承这套书源。' : '取消后新用户将不再继承。'}`)) return
   working.value = true
