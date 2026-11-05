@@ -35,165 +35,165 @@
           </div>
 
           <section class="panel top-panel">
-              <div class="panel-head compact-head">
-                <div>
-                  <h3>总览</h3>
-                  <p v-if="!summaryCollapsed">查看当前默认书源归属，并快速新增用户</p>
-                </div>
-                <div class="top-head-actions">
-                  <div class="default-owner-banner">
-                    <span class="banner-label">当前默认书源</span>
-                    <strong>{{ defaultBookSourceOwner || '未设置' }}</strong>
-                  </div>
-                  <button class="mini-btn" @click="summaryCollapsed = !summaryCollapsed">
-                    {{ summaryCollapsed ? '展开总览' : '收起总览' }}
-                  </button>
-                </div>
+            <div class="panel-head compact-head">
+              <div>
+                <h3>总览</h3>
+                <p v-if="!summaryCollapsed">查看当前默认书源归属，并快速新增用户</p>
               </div>
+              <div class="top-head-actions">
+                <div class="default-owner-banner">
+                  <span class="banner-label">当前默认书源</span>
+                  <strong>{{ defaultBookSourceOwner || '未设置' }}</strong>
+                </div>
+                <button class="mini-btn" @click="summaryCollapsed = !summaryCollapsed">
+                  {{ summaryCollapsed ? '展开总览' : '收起总览' }}
+                </button>
+              </div>
+            </div>
 
-              <div v-if="!summaryCollapsed" class="summary-grid compact-summary">
-                <div class="summary-card">
-                  <span>{{ users.length }}</span>
-                  <small>账号总数</small>
-                </div>
-                <div class="summary-card">
-                  <span>{{ adminCount }}</span>
-                  <small>管理员</small>
-                </div>
-                <div class="summary-card">
-                  <span>{{ backupEnabledCount }}</span>
-                  <small>已开服务器备份</small>
-                </div>
-                <div class="summary-card">
-                  <span>{{ localStoreEnabledCount }}</span>
-                  <small>已开本地存储</small>
-                </div>
-                <div class="summary-card">
-                  <span>{{ aiModelEnabledCount }}</span>
-                  <small>已开 AI 模型</small>
-                </div>
+            <div v-if="!summaryCollapsed" class="summary-grid compact-summary">
+              <div class="summary-card">
+                <span>{{ users.length }}</span>
+                <small>账号总数</small>
               </div>
+              <div class="summary-card">
+                <span>{{ adminCount }}</span>
+                <small>管理员</small>
+              </div>
+              <div class="summary-card">
+                <span>{{ backupEnabledCount }}</span>
+                <small>已开服务器备份</small>
+              </div>
+              <div class="summary-card">
+                <span>{{ localStoreEnabledCount }}</span>
+                <small>已开本地存储</small>
+              </div>
+              <div class="summary-card">
+                <span>{{ aiModelEnabledCount }}</span>
+                <small>已开 AI 模型</small>
+              </div>
+            </div>
 
-              <div class="top-tools">
-                <form v-if="!summaryCollapsed" class="create-form compact-create-form" @submit.prevent="handleCreateUser">
-                  <label class="field">
-                    <span>新增用户</span>
-                    <input v-model.trim="createForm.username" type="text" placeholder="用户名" autocomplete="off" />
-                  </label>
-                  <label class="field">
-                    <span>初始密码</span>
-                    <input v-model="createForm.password" type="password" placeholder="至少 8 位" autocomplete="new-password" />
-                  </label>
-                  <button class="action-btn primary" type="submit" :disabled="working">
-                    {{ working ? '处理中...' : '创建用户' }}
-                  </button>
-                </form>
-              </div>
-            </section>
-
-            <section class="panel list-panel">
-              <div class="panel-head">
-                <div>
-                  <h3>账号列表</h3>
-                  <p>按钮可直接切换权限、设默认书源、重置密码或删除账号</p>
-                </div>
-                <span class="list-count">显示 {{ filteredUsers.length }} / {{ users.length }}</span>
-              </div>
-              <div class="list-toolbar">
-                <label class="search-field">
-                  <span>搜索用户</span>
-                  <input
-                    v-model.trim="keyword"
-                    type="text"
-                    placeholder="按用户名、管理员、默认书源筛选"
-                    autocomplete="off"
-                  />
+            <div class="top-tools">
+              <form v-if="!summaryCollapsed" class="create-form compact-create-form" @submit.prevent="handleCreateUser">
+                <label class="field">
+                  <span>新增用户</span>
+                  <input v-model.trim="createForm.username" type="text" placeholder="用户名" autocomplete="off" />
                 </label>
-              </div>
+                <label class="field">
+                  <span>初始密码</span>
+                  <input v-model="createForm.password" type="password" placeholder="至少 8 位" autocomplete="new-password" />
+                </label>
+                <button class="action-btn primary" type="submit" :disabled="working">
+                  {{ working ? '处理中...' : '创建用户' }}
+                </button>
+              </form>
+            </div>
+          </section>
 
-              <div v-if="loading" class="empty-state">正在加载用户列表...</div>
-              <div v-else-if="filteredUsers.length === 0" class="empty-state">没有匹配到用户</div>
-              <div v-else class="user-list">
-                <article v-for="user in filteredUsers" :key="user.username" class="user-card">
-                  <div class="user-card-top">
-                    <div class="user-meta">
-                      <div class="user-name-row">
-                        <strong>{{ user.username }}</strong>
-                        <span v-if="user.username === currentUsername" class="badge accent">当前账号</span>
-                        <span v-if="user.isAdmin" class="badge">管理员</span>
-                        <span v-if="user.username === defaultBookSourceOwner" class="badge default-badge">默认书源</span>
-                      </div>
-                      <div class="user-times">
-                        <span>创建时间：{{ formatTime(user.createdAt) }}</span>
-                        <span>最近登录：{{ formatTime(user.lastLoginAt) }}</span>
-                      </div>
+          <section class="panel list-panel">
+            <div class="panel-head">
+              <div>
+                <h3>账号列表</h3>
+                <p>按钮可直接切换权限、设默认书源、重置密码或删除账号</p>
+              </div>
+              <span class="list-count">显示 {{ filteredUsers.length }} / {{ users.length }}</span>
+            </div>
+            <div class="list-toolbar">
+              <label class="search-field">
+                <span>搜索用户</span>
+                <input
+                  v-model.trim="keyword"
+                  type="text"
+                  placeholder="按用户名、管理员、默认书源筛选"
+                  autocomplete="off"
+                />
+              </label>
+            </div>
+
+            <div v-if="loading" class="empty-state">正在加载用户列表...</div>
+            <div v-else-if="filteredUsers.length === 0" class="empty-state">没有匹配到用户</div>
+            <div v-else class="user-list">
+              <article v-for="user in filteredUsers" :key="user.username" class="user-card">
+                <div class="user-card-top">
+                  <div class="user-meta">
+                    <div class="user-name-row">
+                      <strong>{{ user.username }}</strong>
+                      <span v-if="user.username === currentUsername" class="badge accent">当前账号</span>
+                      <span v-if="user.isAdmin" class="badge">管理员</span>
+                      <span v-if="user.username === defaultBookSourceOwner" class="badge default-badge">默认书源</span>
                     </div>
-                    <div class="action-row">
-                      <button
-                        class="mini-btn"
-                        :class="{ active: !!user.enableWebdav }"
-                        :disabled="working || !canManageUsers"
-                        @click="handleTogglePermission(user, 'enableWebdav', !user.enableWebdav)"
-                      >
-                        服务器备份
-                      </button>
-                      <button
-                        class="mini-btn"
-                        :class="{ active: !!user.enableLocalStore }"
-                        :disabled="working || !canManageUsers"
-                        @click="handleTogglePermission(user, 'enableLocalStore', !user.enableLocalStore)"
-                      >
-                        本地存储
-                      </button>
-                      <button
-                        class="mini-btn"
-                        :class="{ active: !!user.enableAiModel }"
-                        :disabled="working || !canManageUsers"
-                        @click="handleTogglePermission(user, 'enableAiModel', !user.enableAiModel)"
-                      >
-                        AI模型
-                      </button>
-                      <button
-                        class="mini-btn"
-                        :class="{ active: user.username === defaultBookSourceOwner }"
-                        :disabled="working"
-                        @click="handleSetDefaultBookSources(user)"
-                      >
-                        默认书源
-                      </button>
-                      <button
-                        class="mini-btn"
-                        :class="{ active: resetTarget === user.username }"
-                        @click="toggleResetTarget(user.username)"
-                      >
-                        {{ resetTarget === user.username ? '收起重置密码' : '重置密码' }}
-                      </button>
-                      <button
-                        class="mini-btn danger"
-                        :disabled="working || user.username === currentUsername"
-                        @click="handleDeleteUser(user)"
-                      >
-                        删除
-                      </button>
+                    <div class="user-times">
+                      <span>创建时间：{{ formatTime(user.createdAt) }}</span>
+                      <span>最近登录：{{ formatTime(user.lastLoginAt) }}</span>
                     </div>
                   </div>
-
-                  <div v-if="resetTarget === user.username" class="reset-panel">
-                    <div class="reset-form">
-                      <input
-                        v-model="resetPasswordValue"
-                        type="password"
-                        placeholder="输入新密码"
-                        autocomplete="new-password"
-                      />
-                      <button class="mini-btn primary" :disabled="working" @click="handleResetPassword(user.username)">
-                        保存新密码
-                      </button>
-                    </div>
+                  <div class="action-row">
+                    <button
+                      class="mini-btn"
+                      :class="{ active: !!user.enableWebdav }"
+                      :disabled="working || !canManageUsers"
+                      @click="handleTogglePermission(user, 'enableWebdav', !user.enableWebdav)"
+                    >
+                      服务器备份
+                    </button>
+                    <button
+                      class="mini-btn"
+                      :class="{ active: !!user.enableLocalStore }"
+                      :disabled="working || !canManageUsers"
+                      @click="handleTogglePermission(user, 'enableLocalStore', !user.enableLocalStore)"
+                    >
+                      本地存储
+                    </button>
+                    <button
+                      class="mini-btn"
+                      :class="{ active: !!user.enableAiModel }"
+                      :disabled="working || !canManageUsers"
+                      @click="handleTogglePermission(user, 'enableAiModel', !user.enableAiModel)"
+                    >
+                      AI模型
+                    </button>
+                    <button
+                      class="mini-btn"
+                      :class="{ active: user.username === defaultBookSourceOwner }"
+                      :disabled="working"
+                      @click="handleSetDefaultBookSources(user)"
+                    >
+                      默认书源
+                    </button>
+                    <button
+                      class="mini-btn"
+                      :class="{ active: resetTarget === user.username }"
+                      @click="toggleResetTarget(user.username)"
+                    >
+                      {{ resetTarget === user.username ? '收起重置密码' : '重置密码' }}
+                    </button>
+                    <button
+                      class="mini-btn danger"
+                      :disabled="working || user.username === currentUsername"
+                      @click="handleDeleteUser(user)"
+                    >
+                      删除
+                    </button>
                   </div>
-                </article>
-              </div>
-            </section>
+                </div>
+
+                <div v-if="resetTarget === user.username" class="reset-panel">
+                  <div class="reset-form">
+                    <input
+                      v-model="resetPasswordValue"
+                      type="password"
+                      placeholder="输入新密码"
+                      autocomplete="new-password"
+                    />
+                    <button class="mini-btn primary" :disabled="working" @click="handleResetPassword(user.username)">
+                      保存新密码
+                    </button>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
         </section>
       </div>
     </Transition>
