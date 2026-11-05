@@ -463,15 +463,19 @@ export async function handleGetChapterList(request: Request, env: Env): Promise<
     } catch {}
   }
 
-  const targetUrl = bookUrl || tocUrl;
-  const cleanTarget = decodeURIComponent(targetUrl);
-  const fileNameCandidate = cleanTarget.split("/").pop()?.split("#")[0]?.trim() || "";
+    const targetUrl = bookUrl || tocUrl;
+    const cleanTarget = decodeURIComponent(targetUrl);
+    const fileNameCandidate = cleanTarget.split("/").pop()?.split("#")[0]?.trim() || "";
 
-  // 1. Local books: read chapters from book_details JSON (one book, one JSON)
-  if (targetUrl.startsWith("local-txt:") || targetUrl.startsWith("local-epub:") || targetUrl.startsWith("local-pdf:")) {
-    const bookId = targetUrl.split(":")[1]?.split("#")[0] || "";
-    if (bookId) {
-      const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
+    console.log(`[GetChapterList] userNs=${userNs} bookUrl=${bookUrl} tocUrl=${tocUrl} targetUrl=${cleanTarget}`);
+
+    // 1. Local books: read chapters from book_details JSON (one book, one JSON)
+    if (targetUrl.startsWith("local-txt:") || targetUrl.startsWith("local-epub:") || targetUrl.startsWith("local-pdf:")) {
+      const bookId = targetUrl.split(":")[1]?.split("#")[0] || "";
+      console.log(`[GetChapterList] extracted bookId=${bookId}`);
+      if (bookId) {
+        const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
+        console.log(`[GetChapterList] detail found=${!!detail} chapters=${detail?.chapters?.length || 0}`);
       if (detail && Array.isArray(detail.chapters) && detail.chapters.length > 0) {
         const chapters = detail.chapters.map((ch: any, i: number) => ({
           index: ch.index ?? i,
@@ -493,6 +497,11 @@ export async function handleGetChapterList(request: Request, env: Env): Promise<
         return jsonResponse({ isSuccess: true, data: chapters });
       }
     }
+    // 调试：列出该 bookId 下所有 user_ns，帮助定位 user_ns 不匹配
+    const allRows = await env.DB.prepare(
+      `SELECT book_id, user_ns FROM book_details WHERE book_id = ?1`
+    ).bind(bookId).all<{ book_id: string; user_ns: string }>();
+    console.log(`[GetChapterList] all user_ns for bookId=${bookId}:`, JSON.stringify(allRows.results || []));
     return jsonResponse({ isSuccess: false, errorMsg: "书籍不存在，请重新上传" });
   }
 
