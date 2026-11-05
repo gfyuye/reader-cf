@@ -183,57 +183,57 @@ export async function handleImportWebdavBook(request: Request, env: Env, ctx: Ex
       // 移动文件到 book/ 目录（如果还不在），流式 put 不一次性加载全文到内存
       let finalR2Key = sourceKey;
       if (sourceKey !== bookKey) {
-      try {
-        const existingBookObj = await env.BUCKET.get(bookKey);
-        if (existingBookObj) {
-          return jsonResponse({ isSuccess: false, errorMsg: "文件已存在于 book 文件夹下，请在该文件夹下导入书籍" });
+        try {
+          const existingBookObj = await env.BUCKET.get(bookKey);
+          if (existingBookObj) {
+            return jsonResponse({ isSuccess: false, errorMsg: "文件已存在于 book 文件夹下，请在该文件夹下导入书籍" });
+          }
+          await env.BUCKET.put(bookKey, fileObj.body, { httpMetadata: { contentType: "text/plain; charset=utf-8" } });
+          await env.BUCKET.delete(sourceKey);
+          finalR2Key = bookKey;
+          console.log(`[ImportBook] txt file moved to book/ bookId=${bookId}`);
+        } catch (moveErr: any) {
+          console.log(`[ImportBook] txt file move warning bookId=${bookId} err=${moveErr.message || moveErr}`);
         }
-        await env.BUCKET.put(bookKey, fileObj.body, { httpMetadata: { contentType: "text/plain; charset=utf-8" } });
-        await env.BUCKET.delete(sourceKey);
-        finalR2Key = bookKey;
-        console.log(`[ImportBook] txt file moved to book/ bookId=${bookId}`);
-      } catch (moveErr: any) {
-        console.log(`[ImportBook] txt file move warning bookId=${bookId} err=${moveErr.message || moveErr}`);
       }
-    }
 
-    // 流式扫描章节：分块 Range 读取 R2，不一次性加载全文到内存
-    const chapters = await scanTxtChaptersStreaming(env, finalR2Key, fileSize);
-    const totalChapters = chapters.length;
-    const title = safeName.replace(/\.txt$/i, "");
-    newBook = {
-      name: title,
-      author: "本地导入",
-      bookUrl: `local-txt:${bookId}`,
-      origin: "local-txt",
-      originName: "本地 TXT",
-      tocUrl: `local-txt:${bookId}`,
-      canUpdate: false,
-      durChapterIndex: 0,
-      durChapterPos: 0,
-      durChapterTitle: chapters[0]?.title || "第一章",
-      durChapterTime: now,
-      totalChapterNum: totalChapters,
-      latestChapterTitle: chapters[chapters.length - 1]?.title,
-      kind: "本地TXT",
-      wordCount: `${Math.ceil(fileSize / 2)}字`,
-    };
-    // 写入 book_details（一本书一条 JSON）
-    const txtBookDetail = {
-      ...newBook,
-      bookId,
-      r2Key: finalR2Key,
-      fileSize,
-      updatedAt: now,
-      chapters: chapters.map((ch, i) => ({
-        index: i,
-        title: ch.title,
-        url: `local-txt:${bookId}#${i}`,
-        byteOffset: ch.offset,
-        byteLength: ch.length,
-      })),
-    };
-    await documentHandlers.saveBookDetail(env, userNs, bookId, txtBookDetail);
+      // 流式扫描章节：分块 Range 读取 R2，不一次性加载全文到内存
+      const chapters = await scanTxtChaptersStreaming(env, finalR2Key, fileSize);
+      const totalChapters = chapters.length;
+      const title = safeName.replace(/\.txt$/i, "");
+      newBook = {
+        name: title,
+        author: "本地导入",
+        bookUrl: `local-txt:${bookId}`,
+        origin: "local-txt",
+        originName: "本地 TXT",
+        tocUrl: `local-txt:${bookId}`,
+        canUpdate: false,
+        durChapterIndex: 0,
+        durChapterPos: 0,
+        durChapterTitle: chapters[0]?.title || "第一章",
+        durChapterTime: now,
+        totalChapterNum: totalChapters,
+        latestChapterTitle: chapters[chapters.length - 1]?.title,
+        kind: "本地TXT",
+        wordCount: `${Math.ceil(fileSize / 2)}字`,
+      };
+      // 写入 book_details（一本书一条 JSON）
+      const txtBookDetail = {
+        ...newBook,
+        bookId,
+        r2Key: finalR2Key,
+        fileSize,
+        updatedAt: now,
+        chapters: chapters.map((ch, i) => ({
+          index: i,
+          title: ch.title,
+          url: `local-txt:${bookId}#${i}`,
+          byteOffset: ch.offset,
+          byteLength: ch.length,
+        })),
+      };
+      await documentHandlers.saveBookDetail(env, userNs, bookId, txtBookDetail);
     } catch (err: any) {
       console.log(`[ImportBook] txt parsing error bookId=${bookId} err=${err.message || err}`);
       return jsonResponse({ isSuccess: false, errorMsg: `TXT解析失败：${err.message || err}` });
