@@ -1,8 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch, computed } from 'vue'
 import { getUserInfo } from '../api/user'
-import { dismissVersionUpdate, getVersionUpdate } from '../api/update'
-import type { UserInfo, VersionUpdateInfo } from '../types'
+import type { UserInfo } from '../types'
 import { applySystemTheme } from '../utils/systemUi'
 import { computeNeedSecureKey, readStoredSecureKey, SECURE_KEY_STORAGE_KEY } from '../utils/secureAccess'
 
@@ -38,12 +37,6 @@ export const useAppStore = defineStore('app', () => {
   const adminAuthorized = ref(false)
   const isLoggedIn = ref(false)
   const secureKey = ref(readStoredSecureKey())
-  const versionUpdate = ref<VersionUpdateInfo | null>(null)
-  const versionUpdateLoading = ref(false)
-  const versionUpdateChecked = ref(false)
-  let versionUpdateToastVersion = ''
-  const canCheckVersionUpdate = computed(() => !isSecureMode.value || adminAuthorized.value)
-  const hasVersionUpdateReminder = computed(() => !!versionUpdate.value?.shouldRemind)
 
   async function fetchUserInfo() {
     try {
@@ -58,9 +51,6 @@ export const useAppStore = defineStore('app', () => {
         adminAuthorized: data.adminAuthorized,
       })
       isLoggedIn.value = !!data.username
-      if (canCheckVersionUpdate.value) {
-        void checkVersionUpdate()
-      }
     } catch {
       isLoggedIn.value = false
     }
@@ -75,9 +65,6 @@ export const useAppStore = defineStore('app', () => {
       secureKeyRequired: secureKeyRequired.value,
       adminAuthorized: adminAuthorized.value,
     })
-    if (canCheckVersionUpdate.value) {
-      void checkVersionUpdate()
-    }
   }
 
   function clearUser() {
@@ -98,48 +85,6 @@ export const useAppStore = defineStore('app', () => {
   function updateUserInfo(next: UserInfo | null) {
     userInfo.value = next
     isLoggedIn.value = !!next?.username
-  }
-
-  async function checkVersionUpdate(force = false) {
-    if (versionUpdateLoading.value) return versionUpdate.value
-    versionUpdateLoading.value = true
-    try {
-      const info = await getVersionUpdate(force)
-      versionUpdate.value = info
-      versionUpdateChecked.value = true
-      if (info.shouldRemind && info.latestVersion && versionUpdateToastVersion !== info.latestVersion) {
-        versionUpdateToastVersion = info.latestVersion
-        showToast(`发现服务端新版本 ${info.latestVersion}`, 'warning')
-      }
-      return info
-    } catch (error) {
-      if (force) {
-        showToast((error as Error).message || '检查更新失败', 'error')
-      }
-      return null
-    } finally {
-      versionUpdateLoading.value = false
-    }
-  }
-
-  async function dismissVersionUpdateReminder(version = versionUpdate.value?.latestVersion || '') {
-    if (!version) {
-      showToast('当前没有可忽略的版本', 'warning')
-      return null
-    }
-    versionUpdateLoading.value = true
-    try {
-      const info = await dismissVersionUpdate(version)
-      versionUpdate.value = info
-      versionUpdateToastVersion = version
-      showToast('已忽略当前版本更新提醒', 'success')
-      return info
-    } catch (error) {
-      showToast((error as Error).message || '忽略版本失败', 'error')
-      return null
-    } finally {
-      versionUpdateLoading.value = false
-    }
   }
 
   // ─── UI State ───
@@ -275,8 +220,7 @@ export const useAppStore = defineStore('app', () => {
   return {
     theme, setTheme, toggleTheme,
     userInfo, isSecureMode, needSecureKey, secureKeyRequired, adminAuthorized, secureKey, isLoggedIn,
-    versionUpdate, versionUpdateLoading, versionUpdateChecked, canCheckVersionUpdate, hasVersionUpdateReminder,
-    fetchUserInfo, setUser, clearUser, setSecureKey, updateUserInfo, checkVersionUpdate, dismissVersionUpdateReminder,
+    fetchUserInfo, setUser, clearUser, setSecureKey, updateUserInfo,
     showLoginModal, showSettingsDrawer, showSourceManager, showUserManager, showWebdavManager,
     showGroupManager, showCacheManager, showAiSettings, showRemoteWebdav, triggerImportLocalBookEvent, triggerImportLocalBook,
     isOnline, pwaReady, pwaUpdateAvailable, deferredInstallPrompt, waitingServiceWorker,

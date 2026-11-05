@@ -176,30 +176,6 @@
               <span>{{ appVersion }}</span>
               <small>当前应用版本</small>
             </div>
-            <template v-if="appStore.canCheckVersionUpdate">
-              <div
-                class="status-card"
-                :class="{ accent: appStore.hasVersionUpdateReminder, muted: appStore.versionUpdateLoading }"
-              >
-                <span>{{ versionUpdateTitle }}</span>
-                <small>{{ versionUpdateMessage }}</small>
-              </div>
-              <div class="btn-group version-actions">
-                <button class="action-btn" :disabled="!appStore.versionUpdate?.releaseUrl" @click="handleOpenRelease">
-                  查看 Release
-                </button>
-                <button
-                  class="action-btn"
-                  :disabled="!appStore.hasVersionUpdateReminder || appStore.versionUpdateLoading"
-                  @click="handleDismissVersionUpdate"
-                >
-                  本版本不再提醒
-                </button>
-                <button class="action-btn" :disabled="appStore.versionUpdateLoading" @click="handleCheckVersionUpdate">
-                  {{ appStore.versionUpdateLoading ? '检查中...' : '重新检查' }}
-                </button>
-              </div>
-            </template>
             <div v-if="appStore.pwaUpdateAvailable" class="status-card accent">
               <span>&#21457;&#29616;&#26032;&#29256;&#26412;</span>
               <small>&#21047;&#26032;&#21518;&#21487;&#20351;&#29992;&#26368;&#26032;&#31163;&#32447;&#36164;&#28304;</small>
@@ -414,28 +390,6 @@ const aiStatusMessage = computed(() => {
     ? '支持 Cloudflare 内置免费大模型或自定义外部 DeepSeek / OpenAI 等 API。'
     : '请联系管理员为当前账号开通 AI 模型权限。'
 })
-const versionUpdateTitle = computed(() => {
-  const info = appStore.versionUpdate
-  if (appStore.versionUpdateLoading && !info) return '正在检查服务端版本'
-  if (!info) return '服务端版本检查'
-  if (info.error && !info.latestVersion) return '版本检查失败'
-  if (info.updateAvailable) return `发现服务端新版本 ${info.latestVersion}`
-  return '服务端已是最新版本'
-})
-const versionUpdateMessage = computed(() => {
-  const info = appStore.versionUpdate
-  if (appStore.versionUpdateLoading && !info) return '正在从 GitHub Release 获取最新版本。'
-  if (!info) return '管理员可检查 GitHub Release，发现新版后会在设置入口提示。'
-  if (info.error && !info.latestVersion) return info.error
-  if (info.updateAvailable && info.shouldRemind) {
-    return `当前 ${info.currentVersion}，最新 ${info.latestVersion}。`
-  }
-  if (info.updateAvailable) {
-    return `当前 ${info.currentVersion}，最新 ${info.latestVersion}，本版本已设置不再提醒。`
-  }
-  if (info.error) return `当前 ${info.currentVersion}，上次检查失败：${info.error}`
-  return `当前 ${info.currentVersion}。`
-})
 
 function close() {
   emit('update:modelValue', false)
@@ -594,19 +548,6 @@ function handleApplyUpdate() {
   }
 }
 
-function handleOpenRelease() {
-  const url = appStore.versionUpdate?.releaseUrl
-  if (!url) return
-  window.open(url, '_blank', 'noopener,noreferrer')
-}
-
-async function handleDismissVersionUpdate() {
-  await appStore.dismissVersionUpdateReminder()
-}
-
-async function handleCheckVersionUpdate() {
-  await appStore.checkVersionUpdate(true)
-}
 </script>
 
 <style scoped>
