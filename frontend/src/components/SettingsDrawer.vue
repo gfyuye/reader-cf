@@ -111,11 +111,11 @@
               AI 伴读设置
             </h3>
             <div class="status-card">
-              <span>大模型智能梳理与图谱</span>
-              <small>支持选用 Cloudflare 平台内置免费大模型或自定义外部 DeepSeek / OpenAI 等 API。</small>
+              <span>{{ aiStatusTitle }}</span>
+              <small>{{ aiStatusMessage }}</small>
             </div>
             <div class="btn-group">
-              <button class="action-btn" @click="openAiSettingsDrawer">
+              <button class="action-btn" :disabled="!canOpenAi" @click="openAiSettingsDrawer">
                 打开 AI 设置
               </button>
             </div>
@@ -149,11 +149,11 @@
               远端 WebDAV 同步
             </h3>
             <div class="status-card">
-              <span>第三方云盘容灾备份</span>
-              <small>支持数据变动自动同步及每 5 分钟定时同步至坚果云、Nextcloud 等外部 WebDAV。</small>
+              <span>{{ webdavStatusTitle }}</span>
+              <small>{{ webdavStatusMessage }}</small>
             </div>
             <div class="btn-group">
-              <button class="action-btn" :disabled="!appStore.isLoggedIn && appStore.isSecureMode" @click="openRemoteWebdavModal">
+              <button class="action-btn" :disabled="!canOpenWebdav" @click="openRemoteWebdavModal">
                 远端同步设置
               </button>
             </div>
@@ -401,6 +401,18 @@ const webdavStatusMessage = computed(() => {
   return appStore.userInfo?.enableWebdav
     ? '支持云端文件浏览、直接将 TXT/EPUB/PDF 导入至书架，以及管理备份文件。'
     : '请联系管理员为当前账号开通文件管理权限。'
+})
+
+const canOpenAi = computed(() => appStore.isLoggedIn && !!appStore.userInfo?.enableAiModel)
+const aiStatusTitle = computed(() => {
+  if (!appStore.isLoggedIn) return '登录后可用'
+  return appStore.userInfo?.enableAiModel ? '当前账号已开通 AI 模型' : '当前账号未开通 AI 模型'
+})
+const aiStatusMessage = computed(() => {
+  if (!appStore.isLoggedIn) return '登录并具备 AI 模型权限后，可使用 AI 伴读与智能图谱功能。'
+  return appStore.userInfo?.enableAiModel
+    ? '支持 Cloudflare 内置免费大模型或自定义外部 DeepSeek / OpenAI 等 API。'
+    : '请联系管理员为当前账号开通 AI 模型权限。'
 })
 const versionUpdateTitle = computed(() => {
   const info = appStore.versionUpdate
