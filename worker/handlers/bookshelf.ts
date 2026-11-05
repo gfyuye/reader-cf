@@ -31,6 +31,12 @@ export async function handleSaveBook(request: Request, env: Env, ctx: ExecutionC
   book.bookId = bookId;
   book.updatedAt = Math.floor(Date.now() / 1000);
 
+  // 保留已存在的章节目录，避免被前端书架数据（不含 chapters）覆盖
+  const existing = await documentHandlers.getBookDetail(env, userNs, bookId);
+  if (existing?.chapters) {
+    book.chapters = existing.chapters;
+  }
+
   // 写入 book_details（一本书一条 JSON，含元数据+章节目录+进度）
   await documentHandlers.saveBookDetail(env, userNs, bookId, book);
 
@@ -77,6 +83,11 @@ export async function handleSaveBooks(request: Request, env: Env, ctx: Execution
     if (!bookId) continue;
     book.bookId = bookId;
     book.updatedAt = book.updatedAt || now;
+    // 保留已存在的章节目录，避免被前端书架数据（不含 chapters）覆盖
+    const existing = await documentHandlers.getBookDetail(env, userNs, bookId);
+    if (existing?.chapters) {
+      book.chapters = existing.chapters;
+    }
     await documentHandlers.saveBookDetail(env, userNs, bookId, book);
     shelfItems.push({
       bookId,
@@ -467,43 +478,34 @@ export async function handleGetChapterList(request: Request, env: Env): Promise<
     const cleanTarget = decodeURIComponent(targetUrl);
     const fileNameCandidate = cleanTarget.split("/").pop()?.split("#")[0]?.trim() || "";
 
-    console.log(`[GetChapterList] userNs=${userNs} bookUrl=${bookUrl} tocUrl=${tocUrl} targetUrl=${cleanTarget}`);
-
     // 1. Local books: read chapters from book_details JSON (one book, one JSON)
     if (targetUrl.startsWith("local-txt:") || targetUrl.startsWith("local-epub:") || targetUrl.startsWith("local-pdf:")) {
       const bookId = targetUrl.split(":")[1]?.split("#")[0] || "";
-      console.log(`[GetChapterList] extracted bookId=${bookId}`);
       if (bookId) {
         const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
-        console.log(`[GetChapterList] detail found=${!!detail} chapters=${detail?.chapters?.length || 0}`);
-      if (detail && Array.isArray(detail.chapters) && detail.chapters.length > 0) {
-        const chapters = detail.chapters.map((ch: any, i: number) => ({
-          index: ch.index ?? i,
-          title: ch.title,
-          url: ch.url || (`local-${detail.kind?.includes("TXT") ? "txt" : detail.kind?.includes("EPUB") ? "epub" : "pdf"}:${bookId}#${ch.index ?? i}`),
-          byteOffset: ch.byteOffset,
-          byteLength: ch.byteLength,
-        }));
-        return jsonResponse({ isSuccess: true, data: chapters });
-      }
-      // PDF: generate page list from totalChapterNum
-      if (targetUrl.startsWith("local-pdf:") && detail) {
-        const count = Math.max(1, detail.totalChapterNum || 1);
-        const chapters = Array.from({ length: count }, (_, i) => ({
-          index: i,
-          title: `第 ${i + 1} 页`,
-          url: `local-pdf:${bookId}#${i}`,
-        }));
-        return jsonResponse({ isSuccess: true, data: chapters });
+        if (detail && Array.isArray(detail.chapters) && detail.chapters.length > 0) {
+          const chapters = detail.chapters.map((ch: any, i: number) => ({
+            index: ch.index ?? i,
+            title: ch.title,
+            url: ch.url || (`local-${detail.kind?.includes("TXT") ? "txt" : detail.kind?.includes("EPUB") ? "epub" : "pdf"}:${bookId}#${ch.index ?? i}`),
+            byteOffset: ch.byteOffset,
+            byteLength: ch.byteLength,
+          }));
+          return jsonResponse({ isSuccess: true, data: chapters });
+        }
+        // PDF: generate page list from totalChapterNum
+        if (targetUrl.startsWith("local-pdf:") && detail) {
+          const count = Math.max(1, detail.totalChapterNum || 1);
+          const chapters = Array.from({ length: count }, (_, i) => ({
+            index: i,
+            title: `第 ${i + 1} 页`,
+            url: `local-pdf:${bookId}#${i}`,
+          }));
+          return jsonResponse({ isSuccess: true, data: chapters });
+        }
       }
     }
-    // 调试：列出该 bookId 下所有 user_ns，帮助定位 user_ns 不匹配
-    const allRows = await env.DB.prepare(
-      `SELECT book_id, user_ns FROM book_details WHERE book_id = ?1`
-    ).bind(bookId).all<{ book_id: string; user_ns: string }>();
-    console.log(`[GetChapterList] all user_ns for bookId=${bookId}:`, JSON.stringify(allRows.results || []));
     return jsonResponse({ isSuccess: false, errorMsg: "书籍不存在，请重新上传" });
-  }
 
 
   return jsonResponse({ isSuccess: true, data: [] });
