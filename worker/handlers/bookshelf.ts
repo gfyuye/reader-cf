@@ -31,10 +31,16 @@ export async function handleSaveBook(request: Request, env: Env, ctx: ExecutionC
   book.bookId = bookId;
   book.updatedAt = Math.floor(Date.now() / 1000);
 
-  // 保留已存在的章节目录，避免被前端书架数据（不含 chapters）覆盖
+  // 保留已存在的章节目录、r2Key、fileSize，避免被前端书架数据覆盖
   const existing = await documentHandlers.getBookDetail(env, userNs, bookId);
   if (existing?.chapters) {
     book.chapters = existing.chapters;
+  }
+  if (existing?.r2Key) {
+    book.r2Key = existing.r2Key;
+  }
+  if (existing?.fileSize) {
+    book.fileSize = existing.fileSize;
   }
 
   // 写入 book_details（一本书一条 JSON，含元数据+章节目录+进度）
@@ -83,10 +89,16 @@ export async function handleSaveBooks(request: Request, env: Env, ctx: Execution
     if (!bookId) continue;
     book.bookId = bookId;
     book.updatedAt = book.updatedAt || now;
-    // 保留已存在的章节目录，避免被前端书架数据（不含 chapters）覆盖
+    // 保留已存在的章节目录、r2Key、fileSize，避免被前端书架数据覆盖
     const existing = await documentHandlers.getBookDetail(env, userNs, bookId);
     if (existing?.chapters) {
       book.chapters = existing.chapters;
+    }
+    if (existing?.r2Key) {
+      book.r2Key = existing.r2Key;
+    }
+    if (existing?.fileSize) {
+      book.fileSize = existing.fileSize;
     }
     await documentHandlers.saveBookDetail(env, userNs, bookId, book);
     shelfItems.push({
