@@ -1203,11 +1203,7 @@ export const useReaderStore = defineStore('reader', () => {
     chapters.value = []
     content.value = ''
     appStore.markBookOpened(b.bookUrl)
-    const savedPos = getSavedReadingPosition(b.bookUrl)
-    const effectiveIndex = (savedPos && typeof savedPos.chapterIndex === 'number')
-      ? savedPos.chapterIndex
-      : (b.durChapterIndex || 0)
-    currentIndex.value = effectiveIndex
+    currentIndex.value = 0
     chapterScrollProgress.value = 0
     preloadedContent.value.clear()
     loadReadChapterHistory(b)
