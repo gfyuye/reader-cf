@@ -4,7 +4,7 @@ import { getEnv } from "../env";
 import { Env } from "../types";
 import * as documentHandlers from "../handlers/document";
 import { triggerOnChangeSync } from "./webdav";
-import { isSafeRemoteUrl } from "../utils";
+import { isSafeRemoteUrl, fetchTextWithEncoding } from "../utils";
 
 export async function handleGetBookSources(request: Request, env: Env): Promise<Response> {
   const userNs = await resolveUserNs(request, env);
@@ -48,8 +48,17 @@ export async function handleGetBookSource(request: Request, env: Env): Promise<R
   const userNs = await resolveUserNs(request, env);
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
-  const url = new URL(request.url);
-  const sourceUrl = url.searchParams.get("url") || "";
+  let sourceUrl = "";
+  if (request.method === "POST") {
+    try {
+      const body = await request.json<any>();
+      sourceUrl = body.bookSourceUrl || body.url || "";
+    } catch {}
+  }
+  if (!sourceUrl) {
+    const url = new URL(request.url);
+    sourceUrl = url.searchParams.get("url") || "";
+  }
 
   const row = await env.DB.prepare(
     `SELECT json FROM book_sources WHERE user_ns = ?1 AND book_source_url = ?2`
@@ -267,4 +276,284 @@ export async function handleSetAsDefaultBookSources(request: Request, env: Env):
   }
 
   return jsonResponse({ isSuccess: true, data: `已将 ${username} 的书源设为默认书源 (${stmts.length} 项)` });
+}
+
+// ==========================================
+// 书源测试 / 登录 / 代理 / 导入
+// ==========================================
+
+export async function handleTestBookSources(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+  const body = await request.json<{
+    bookSourceUrls?: string[];
+    keyword?: string;
+    markInvalid?: boolean;
+    concurrent?: number;
+  }>();
+  const urls = (body?.bookSourceUrls || []).filter(Boolean);
+  if (!urls.length) {
+    return jsonResponse({ isSuccess: false, errorMsg: "没有书源可测试" });
+  }
+
+  const keyword = body?.keyword || "";
+  const markInvalid = body?.markInvalid === true;
+  const concurrent = Math.min(Math.max(body?.concurrent || 6, 1), 20);
+
+  const results: any[] = [];
+  let valid = 0;
+  let invalid = 0;
+  let markedInvalid = 0;
+
+  const testOne = async (sourceUrl: string) => {
+    const row = await env.DB.prepare(
+      `SELECT json FROM book_sources WHERE user_ns = ?1 AND book_source_url = ?2`
+    )
+      .bind(userNs, sourceUrl)
+      .first<{ json: string }>();
+    if (!row) return;
+    let source: any;
+    try {
+      source = JSON.parse(row.json);
+    } catch {
+      return;
+    }
+
+    const result: any = {
+      bookSourceName: source.bookSourceName,
+      bookSourceUrl: source.bookSourceUrl,
+      valid: false,
+      searchOk: false,
+      exploreOk: false,
+      keyword,
+      markedInvalid: false,
+    };
+
+    const testUrl = (source.exploreUrl || source.searchUrl || "").replace("{keyword}", encodeURIComponent(keyword || "test"));
+    if (!testUrl) {
+      result.valid = false;
+      invalid++;
+      results.push(result);
+      return;
+    }
+
+    try {
+      if (!isSafeRemoteUrl(testUrl)) throw new Error("受限制的 URL");
+      const resp = await fetch(testUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+      });
+      const ok = resp.status >= 200 && resp.status < 400;
+      result.searchOk = ok;
+      result.exploreOk = ok;
+      result.valid = ok;
+      if (ok) valid++;
+      else invalid++;
+    } catch (err: any) {
+      result.searchError = err.message;
+      result.exploreError = err.message;
+      result.valid = false;
+      invalid++;
+    }
+
+    if (markInvalid && !result.valid) {
+      try {
+        await env.DB.prepare(
+          `UPDATE book_sources SET json = ?1 WHERE user_ns = ?2 AND book_source_url = ?3`
+        ).bind(
+          JSON.stringify({ ...source, enabled: false }),
+          userNs,
+          sourceUrl
+        ).run();
+        result.markedInvalid = true;
+        markedInvalid++;
+      } catch {}
+    }
+    results.push(result);
+  };
+
+  // 分批并发测试
+  for (let i = 0; i < urls.length; i += concurrent) {
+    const batch = urls.slice(i, i + concurrent);
+    await Promise.all(batch.map(testOne));
+  }
+
+  return jsonResponse({
+    isSuccess: true,
+    data: {
+      total: urls.length,
+      valid,
+      invalid,
+      markedInvalid,
+      results,
+    },
+  });
+}
+
+export async function handleGetInvalidBookSources(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+  const rows = await env.DB.prepare(
+    `SELECT json FROM book_sources WHERE user_ns = ?1 AND (json LIKE '%"enabled":false%' OR json LIKE '%"enabled": false%')`
+  )
+    .bind(userNs)
+    .all<{ json: string }>();
+
+  const list = (rows.results || []).map((r) => {
+    try {
+      return JSON.parse(r.json);
+    } catch {
+      return null;
+    }
+  }).filter(Boolean);
+
+  return jsonResponse({ isSuccess: true, data: list });
+}
+
+export async function handleDeleteInvalidBookSources(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+  const before = await env.DB.prepare(
+    `SELECT count(*) as cnt FROM book_sources WHERE user_ns = ?1 AND (json LIKE '%"enabled":false%' OR json LIKE '%"enabled": false%)`
+  )
+    .bind(userNs)
+    .first<{ cnt: number }>();
+
+  await env.DB.prepare(
+    `DELETE FROM book_sources WHERE user_ns = ?1 AND (json LIKE '%"enabled":false%' OR json LIKE '%"enabled": false%)`
+  )
+    .bind(userNs)
+    .run();
+
+  triggerOnChangeSync(env, userNs, ctx);
+  return jsonResponse({ isSuccess: true, data: { deleted: before?.cnt || 0 } });
+}
+
+export async function handleLoginBookSource(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+  const body = await request.json<{ bookSourceUrl: string }>();
+  const sourceUrl = body?.bookSourceUrl || "";
+  if (!sourceUrl) {
+    return jsonResponse({ isSuccess: false, errorMsg: "缺少 bookSourceUrl" });
+  }
+
+  const row = await env.DB.prepare(
+    `SELECT json FROM book_sources WHERE user_ns = ?1 AND book_source_url = ?2`
+  )
+    .bind(userNs, sourceUrl)
+    .first<{ json: string }>();
+  if (!row) return jsonResponse({ isSuccess: false, errorMsg: "未找到该书源" });
+
+  let source: any;
+  try {
+    source = JSON.parse(row.json);
+  } catch {
+    return jsonResponse({ isSuccess: false, errorMsg: "书源数据损坏" });
+  }
+
+  const loginUrl = source.loginUrl;
+  if (!loginUrl) {
+    return jsonResponse({ isSuccess: false, errorMsg: "当前书源未配置 loginUrl" });
+  }
+
+  if (!isSafeRemoteUrl(loginUrl)) {
+    return jsonResponse({ isSuccess: false, errorMsg: "受限制的登录 URL" });
+  }
+
+  try {
+    const resp = await fetch(loginUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+    });
+    const status = resp.status;
+    const text = await fetchTextWithEncoding(resp);
+    const checkResult = text.slice(0, 200);
+    const bodyPreview = text.slice(0, 500);
+    const bodyHtml = text.slice(0, 2000);
+
+    return jsonResponse({
+      isSuccess: true,
+      data: {
+        success: status >= 200 && status < 400,
+        status,
+        url: loginUrl,
+        checkResult,
+        bodyPreview,
+        bodyHtml,
+      },
+    });
+  } catch (err: any) {
+    return jsonResponse({
+      isSuccess: true,
+      data: {
+        success: false,
+        status: 0,
+        url: loginUrl,
+        checkResult: err.message,
+        bodyPreview: "",
+        bodyHtml: "",
+      },
+    });
+  }
+}
+
+export async function handleReadSourceFile(request: Request, env: Env): Promise<Response> {
+  const userNs = await resolveUserNs(request, env);
+  if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
+
+  const formData = await request.formData();
+  const file = formData.get("file") as unknown as File | null;
+  if (!file) return jsonResponse({ isSuccess: false, errorMsg: "缺少文件" });
+
+  const text = await file.text();
+  let parsed: any;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return jsonResponse({ isSuccess: false, errorMsg: "文件不是有效的 JSON" });
+  }
+
+  const sources = Array.isArray(parsed) ? parsed : [parsed];
+  const validSources = sources.filter((s: any) => s && s.bookSourceUrl && s.bookSourceName);
+
+  return jsonResponse({ isSuccess: true, data: validSources });
+}
+
+export async function handleBookSourceProxy(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const targetUrl = url.searchParams.get("url") || "";
+  const bookSourceUrl = url.searchParams.get("bookSourceUrl") || "";
+
+  if (!targetUrl || !isSafeRemoteUrl(targetUrl)) {
+    return jsonResponse({ isSuccess: false, errorMsg: "无效或受限制的目标 URL" });
+  }
+
+  try {
+    const headers: Record<string, string> = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    };
+    if (bookSourceUrl) {
+      try {
+        const parsedSource = new URL(bookSourceUrl);
+        headers["Referer"] = `${parsedSource.protocol}//${parsedSource.host}`;
+      } catch {}
+    }
+    const resp = await fetch(targetUrl, { headers });
+    const contentType = resp.headers.get("content-type") || "";
+    const body = await resp.arrayBuffer();
+
+    return new Response(body, {
+      status: resp.status,
+      headers: {
+        "content-type": contentType,
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "*",
+      },
+    });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: `代理请求失败：${err.message}` });
+  }
 }

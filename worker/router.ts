@@ -79,6 +79,12 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
     if (path === "/reader3/readRemoteSourceFile" && request.method === "POST") return bookSourceHandlers.handleReadRemoteSourceFile(request, env);
     if (path === "/reader3/setAsDefaultBookSources" && request.method === "POST") return bookSourceHandlers.handleSetAsDefaultBookSources(request, env);
     if (path === "/reader3/getDefaultBookSourceOwner" && request.method === "GET") return bookSourceHandlers.handleGetDefaultBookSourceOwner(request, env);
+    if (path === "/reader3/testBookSources" && request.method === "POST") return bookSourceHandlers.handleTestBookSources(request, env);
+    if (path === "/reader3/getInvalidBookSources" && request.method === "POST") return bookSourceHandlers.handleGetInvalidBookSources(request, env);
+    if (path === "/reader3/deleteInvalidBookSources" && request.method === "POST") return bookSourceHandlers.handleDeleteInvalidBookSources(request, env, ctx);
+    if (path === "/reader3/loginBookSource" && request.method === "POST") return bookSourceHandlers.handleLoginBookSource(request, env);
+    if (path === "/reader3/readSourceFile" && request.method === "POST") return bookSourceHandlers.handleReadSourceFile(request, env);
+    if (path === "/reader3/bookSourceProxy" && request.method === "GET") return bookSourceHandlers.handleBookSourceProxy(request, env);
 
     // Multi-Source Search
     if (path === "/reader3/searchBookMulti" && request.method === "POST") return searchHandlers.handleSearchBookMulti(request, env);
