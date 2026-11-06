@@ -945,7 +945,7 @@ function loadSavedReadingPosition() {
       source = 'local'
     } else if (localSaved && typeof localSaved.chapterIndex === 'number' && localSaved.chapterIndex >= 0) {
       const serverTime = normalizePositionTimestamp(store.book?.durChapterTime)
-      if (localSaved.updatedAt >= serverTime || (store.book?.durChapterIndex ?? 0) === 0) {
+      if (localSaved.updatedAt >= serverTime) {
         selected = localSaved
         source = 'local'
         if (store.currentIndex !== localSaved.chapterIndex) {
