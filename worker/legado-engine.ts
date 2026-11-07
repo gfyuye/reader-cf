@@ -219,27 +219,144 @@ interface CssSelector {
   tag?: string;
   classes: string[];
   id?: string;
+  attrs: AttrSelector[];
+  pseudos: PseudoSelector[];
+}
+
+interface AttrSelector {
+  name: string;
+  operator: "=" | "*=" | "^=" | "$=" | "!=" | "~=" | "|=" | null;
+  value: string;
+  caseInsensitive: boolean;
+}
+
+interface PseudoSelector {
+  type: "first-child" | "last-child" | "nth-child" | "nth-last-child" | "not" | "only-child" | "empty";
+  arg?: string;
 }
 
 function parseCssSelector(css: string): CssSelector {
-  const sel: CssSelector = { classes: [] };
+  const sel: CssSelector = { classes: [], attrs: [], pseudos: [] };
   const s = css.trim();
   if (!s) return sel;
 
   let rest = s;
+
+  // id
   const idMatch = s.match(/#([a-zA-Z0-9_-]+)/);
   if (idMatch) {
     sel.id = idMatch[1];
     rest = rest.replace(idMatch[0], "");
   }
+
+  // classes (.book.item -> ["book","item"])
   const classMatches = s.match(/\.([a-zA-Z0-9_-]+)/g);
   if (classMatches) {
     sel.classes = classMatches.map((m) => m.substring(1));
     rest = rest.replace(/\.[a-zA-Z0-9_-]+/g, "");
   }
+
+  // attribute selectors [attr], [attr=val], [attr*=val], [attr^=val], [attr$=val], [attr!=val], [attr~=val], [attr|=val], [attr i]
+  const attrRegex = /\[([a-zA-Z0-9_-]+)(\*=?|\^=?|\$=?|!=|~=?|\|=)?(?:["']([^"']*)["'])?(\s*i)?\]/g;
+  let m;
+  while ((m = attrRegex.exec(s)) !== null) {
+    sel.attrs.push({
+      name: m[1].toLowerCase(),
+      operator: (m[2] || null) as any,
+      value: m[3] ?? "",
+      caseInsensitive: !!m[4],
+    });
+    rest = rest.replace(m[0], "");
+  }
+
+  // pseudo-classes :first-child :last-child :nth-child(...) :not(...) :only-child :empty
+  const pseudoRegex = /:(first-child|last-child|only-child|empty|nth-child|nth-last-child|not)\(?([^)]*)\)?/g;
+  while ((m = pseudoRegex.exec(s)) !== null) {
+    sel.pseudos.push({ type: m[1] as any, arg: m[2] ? m[2].trim() : undefined });
+    rest = rest.replace(m[0], "");
+  }
+
   const tagPart = rest.trim();
   if (tagPart) sel.tag = tagPart.toLowerCase();
   return sel;
+}
+
+function matchAttr(el: DefaultTreeAdapterTypes.Element, a: AttrSelector): boolean {
+  const attr = el.attrs.find((at) => at.name.toLowerCase() === a.name);
+  if (!attr) return false;
+  const val = a.caseInsensitive ? attr.value.toLowerCase() : attr.value;
+  const cmp = a.caseInsensitive ? a.value.toLowerCase() : a.value;
+  switch (a.operator) {
+    case null: return true; // [attr] exists
+    case "=": return val === cmp;
+    case "!=": return val !== cmp;
+    case "*=": return val.includes(cmp);
+    case "^=": return val.startsWith(cmp);
+    case "$=": return val.endsWith(cmp);
+    case "~=": return val.split(/\s+/).includes(cmp);
+    case "|=": return val === cmp || val.startsWith(cmp + "-");
+    default: return true;
+  }
+}
+
+function nthIndex(el: DefaultTreeAdapterTypes.Element): number {
+  const parent = (el as any).parentNode as DefaultTreeAdapterTypes.Element | null;
+  if (!parent) return 1;
+  let i = 1;
+  for (const c of parent.childNodes) {
+    if (c === el) return i;
+    if (c.nodeName === "element") i++;
+  }
+  return 1;
+}
+
+function matchPseudo(el: DefaultTreeAdapterTypes.Element, p: PseudoSelector, parent: DefaultTreeAdapterTypes.Element | null): boolean {
+  switch (p.type) {
+    case "first-child":
+      if (!parent) return false;
+      return nthIndex(el) === 1;
+    case "last-child": {
+      if (!parent) return false;
+      const elems = parent.childNodes.filter((c) => c.nodeName === "element") as DefaultTreeAdapterTypes.Element[];
+      return elems[elems.length - 1] === el;
+    }
+    case "only-child": {
+      if (!parent) return false;
+      const elems = parent.childNodes.filter((c) => c.nodeName === "element");
+      return elems.length === 1 && elems[0] === el;
+    }
+    case "empty":
+      return el.childNodes.length === 0;
+    case "nth-child":
+    case "nth-last-child": {
+      if (!parent) return false;
+      const elems = parent.childNodes.filter((c) => c.nodeName === "element") as DefaultTreeAdapterTypes.Element[];
+      const idx = p.type === "nth-last-child" ? elems.length - nthIndex(el) + 1 : nthIndex(el);
+      return matchNth(p.arg!, idx);
+    }
+    case "not": {
+      if (!p.arg) return true;
+      const negSel = parseCssSelector(p.arg);
+      return !nodeMatchesSelector(el, negSel);
+    }
+    default:
+      return true;
+  }
+}
+
+function matchNth(arg: string, idx: number): boolean {
+  const a = arg.toLowerCase().trim();
+  if (a === "even") return idx % 2 === 0;
+  if (a === "odd") return idx % 2 === 1;
+  const m = a.match(/^(-?\d+)n\s*([+-]\s*\d+)?$/);
+  if (m) {
+    const step = parseInt(m[1], 10) || 0;
+    const offset = m[2] ? parseInt(m[2].replace(/\s+/g, ""), 10) : 0;
+    if (step === 0) return idx === offset;
+    return (idx - offset) % step === 0 && (idx - offset) / step >= 0;
+  }
+  const n = parseInt(a, 10);
+  return !isNaN(n) && idx === n;
 }
 
 function nodeMatchesSelector(node: DefaultTreeAdapterTypes.Node, sel: CssSelector): boolean {
@@ -261,6 +378,16 @@ function nodeMatchesSelector(node: DefaultTreeAdapterTypes.Node, sel: CssSelecto
       if (!classes.includes(c)) return false;
     }
   }
+
+  for (const a of sel.attrs) {
+    if (!matchAttr(el, a)) return false;
+  }
+
+  const parent = (el as any).parentNode as DefaultTreeAdapterTypes.Element | null;
+  for (const p of sel.pseudos) {
+    if (!matchPseudo(el, p, parent)) return false;
+  }
+
   return true;
 }
 
