@@ -12,6 +12,7 @@
     "setup:cf": "node scripts/setup-cf.cjs"
   },
   "dependencies": {
+    "parse5": "^8.1.0",
     "vue": "^3.5.13"
   },
   "devDependencies": {

@@ -10,6 +10,8 @@
  */
 
 import { md5Hex } from "./md5";
+import * as parse5 from "parse5";
+import type { DefaultTreeAdapterTypes } from "parse5";
 
 // ==========================================
 // 1. Delimiter & Top-Level Rule Splitting
@@ -202,7 +204,7 @@ export function legadoToCss(selector: string): string {
 }
 
 // ==========================================
-// 4. Lightweight Pure-TS DOM Parser & Extractor
+// 4. HTML DOM Parser & Extractor (parse5)
 // ==========================================
 
 interface HtmlNode {
@@ -213,53 +215,132 @@ interface HtmlNode {
   html: string;
 }
 
-export function parseHtmlElements(html: string, selectorRule: string): HtmlNode[] {
-  const css = legadoToCss(selectorRule);
-  const tagMatch = css.match(/^[a-zA-Z0-9_-]+/);
-  const classMatch = css.match(/\.([a-zA-Z0-9_-]+)/);
-  const idMatch = css.match(/#([a-zA-Z0-9_-]+)/);
+interface CssSelector {
+  tag?: string;
+  classes: string[];
+  id?: string;
+}
 
-  const targetTag = tagMatch ? tagMatch[0].toLowerCase() : "[a-zA-Z0-9_-]+";
-  const targetClass = classMatch ? classMatch[1] : null;
-  const targetId = idMatch ? idMatch[1] : null;
+function parseCssSelector(css: string): CssSelector {
+  const sel: CssSelector = { classes: [] };
+  const s = css.trim();
+  if (!s) return sel;
 
-  const nodeRegex = new RegExp(`<(${targetTag})\\b([^>]*)>([\\s\\S]*?)<\\/\\1>`, "gi");
-  const nodes: HtmlNode[] = [];
-  let m;
+  let rest = s;
+  const idMatch = s.match(/#([a-zA-Z0-9_-]+)/);
+  if (idMatch) {
+    sel.id = idMatch[1];
+    rest = rest.replace(idMatch[0], "");
+  }
+  const classMatches = s.match(/\.([a-zA-Z0-9_-]+)/g);
+  if (classMatches) {
+    sel.classes = classMatches.map((m) => m.substring(1));
+    rest = rest.replace(/\.[a-zA-Z0-9_-]+/g, "");
+  }
+  const tagPart = rest.trim();
+  if (tagPart) sel.tag = tagPart.toLowerCase();
+  return sel;
+}
 
-  while ((m = nodeRegex.exec(html)) !== null) {
-    const rawAttrs = m[2] || "";
-    const innerHtml = m[3] || "";
+function nodeMatchesSelector(node: DefaultTreeAdapterTypes.Node, sel: CssSelector): boolean {
+  if (node.nodeName !== "element") return false;
+  const el = node as DefaultTreeAdapterTypes.Element;
+  const tagName = el.nodeName.toLowerCase();
+  if (sel.tag && sel.tag !== tagName) return false;
 
-    // Attribute filters
-    if (targetId) {
-      const idVal = (rawAttrs.match(/\bid=["']([^"']+)["']/i) || [])[1];
-      if (idVal !== targetId) continue;
-    }
-    if (targetClass) {
-      const classVal = (rawAttrs.match(/\bclass=["']([^"']+)["']/i) || [])[1] || "";
-      const classes = classVal.split(/\s+/);
-      if (!classes.includes(targetClass)) continue;
-    }
-
-    const attrs: Record<string, string> = {};
-    const attrRegex = /\b([a-zA-Z0-9_-]+)=["']([^"']*)["']/g;
-    let am;
-    while ((am = attrRegex.exec(rawAttrs)) !== null) {
-      attrs[am[1].toLowerCase()] = am[2];
-    }
-
-    const text = innerHtml.replace(/<[^>]+>/g, "").trim();
-    nodes.push({
-      tag: m[1].toLowerCase(),
-      attrs,
-      rawAttrs,
-      text,
-      html: innerHtml,
-    });
+  if (sel.id) {
+    const idAttr = el.attrs.find((a) => a.name.toLowerCase() === "id");
+    if (!idAttr || idAttr.value !== sel.id) return false;
   }
 
-  return nodes;
+  if (sel.classes.length > 0) {
+    const classAttr = el.attrs.find((a) => a.name.toLowerCase() === "class");
+    if (!classAttr) return false;
+    const classes = classAttr.value.split(/\s+/).filter(Boolean);
+    for (const c of sel.classes) {
+      if (!classes.includes(c)) return false;
+    }
+  }
+  return true;
+}
+
+function serializeNode(node: DefaultTreeAdapterTypes.Node): string {
+  if (node.nodeName === "element") {
+    const el = node as DefaultTreeAdapterTypes.Element;
+    let out = `<${el.nodeName}`;
+    for (const attr of el.attrs) {
+      out += ` ${attr.name}="${attr.value}"`;
+    }
+    const voidElements = new Set([
+      "area", "base", "br", "col", "embed", "hr", "img", "input",
+      "link", "meta", "param", "source", "track", "wbr",
+    ]);
+    if (voidElements.has(el.nodeName)) {
+      out += ">";
+      return out;
+    }
+    out += ">";
+    for (const child of el.childNodes) {
+      out += serializeNode(child);
+    }
+    out += `</${el.nodeName}>`;
+    return out;
+  }
+  if (node.nodeName === "#text") {
+    return (node as DefaultTreeAdapterTypes.TextNode).value;
+  }
+  if (node.nodeName === "#comment") {
+    return `<!--${(node as DefaultTreeAdapterTypes.CommentNode).data}-->`;
+  }
+  return "";
+}
+
+function getTextContent(node: DefaultTreeAdapterTypes.Node): string {
+  if (node.nodeName === "#text") return (node as DefaultTreeAdapterTypes.TextNode).value;
+  if (node.nodeName === "element") {
+    return (node as DefaultTreeAdapterTypes.Element).childNodes.map(getTextContent).join("");
+  }
+  return "";
+}
+
+function findElements(root: DefaultTreeAdapterTypes.Node, sel: CssSelector): DefaultTreeAdapterTypes.Element[] {
+  const results: DefaultTreeAdapterTypes.Element[] = [];
+  const walk = (node: DefaultTreeAdapterTypes.Node) => {
+    if (nodeMatchesSelector(node, sel)) {
+      results.push(node as DefaultTreeAdapterTypes.Element);
+    }
+    if (node.nodeName === "element") {
+      for (const child of (node as DefaultTreeAdapterTypes.Element).childNodes) {
+        walk(child);
+      }
+    }
+  };
+  walk(root);
+  return results;
+}
+
+export function parseHtmlElements(html: string, selectorRule: string): HtmlNode[] {
+  const css = legadoToCss(selectorRule);
+  const sel = parseCssSelector(css);
+  const fragment = parse5.parseFragment(html);
+  const elements = findElements(fragment, sel);
+
+  return elements.map((el) => {
+    const attrs: Record<string, string> = {};
+    const rawAttrs: string[] = [];
+    for (const attr of el.attrs) {
+      attrs[attr.name.toLowerCase()] = attr.value;
+      rawAttrs.push(`${attr.name}="${attr.value}"`);
+    }
+    const innerHtml = el.childNodes.map(serializeNode).join("");
+    return {
+      tag: el.nodeName.toLowerCase(),
+      attrs,
+      rawAttrs: rawAttrs.join(" "),
+      text: getTextContent(el).trim(),
+      html: innerHtml,
+    };
+  });
 }
 
 export function extractTextFromHtml(html: string, rule: string): string {
@@ -279,9 +360,10 @@ export function extractTextFromHtml(html: string, rule: string): string {
   const nodes = parseHtmlElements(html, selector);
   if (!nodes.length) {
     // If no node matched selector, try direct extractor on full html
+    const fragment = parse5.parseFragment(html);
     let raw = "";
-    if (extractor === "text") raw = html.replace(/<[^>]+>/g, "").trim();
-    else if (extractor === "html") raw = html.trim();
+    if (extractor === "text") raw = getTextContent(fragment).trim();
+    else if (extractor === "html") raw = serializeNode(fragment).trim();
     if (replacePattern) {
       try { raw = raw.replace(new RegExp(replacePattern, "g"), replaceWith); } catch {}
     }
