@@ -16,6 +16,7 @@ import * as searchHandlers from "./handlers/search";
 import * as uploadHandlers from "./handlers/upload";
 import * as webdavHandlers from "./handlers/webdav";
 import * as importBookHandlers from "./handlers/ImportBook";
+import * as sourceBookHandlers from "./handlers/source-book";
 
 export async function handleRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (request.method === "OPTIONS") {
@@ -85,6 +86,7 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
     if (path === "/reader3/loginBookSource" && request.method === "POST") return bookSourceHandlers.handleLoginBookSource(request, env);
     if (path === "/reader3/readSourceFile" && request.method === "POST") return bookSourceHandlers.handleReadSourceFile(request, env);
     if (path === "/reader3/bookSourceProxy" && request.method === "GET") return bookSourceHandlers.handleBookSourceProxy(request, env);
+    if (path === "/reader3/importSourceBook" && request.method === "POST") return sourceBookHandlers.handleSourceBookImport(request, env, ctx);
 
     // Multi-Source Search
     if (path === "/reader3/searchBookMulti" && request.method === "POST") return searchHandlers.handleSearchBookMulti(request, env);

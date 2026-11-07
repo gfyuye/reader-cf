@@ -486,41 +486,63 @@ export async function handleGetChapterList(request: Request, env: Env): Promise<
     } catch {}
   }
 
-    const targetUrl = bookUrl || tocUrl;
-    const cleanTarget = decodeURIComponent(targetUrl);
-    const fileNameCandidate = cleanTarget.split("/").pop()?.split("#")[0]?.trim() || "";
+  const targetUrl = bookUrl || tocUrl;
+  const cleanTarget = decodeURIComponent(targetUrl);
+  const fileNameCandidate = cleanTarget.split("/").pop()?.split("#")[0]?.trim() || "";
 
-    // 1. Local books: read chapters from book_details JSON (one book, one JSON)
-    if (targetUrl.startsWith("local-txt:") || targetUrl.startsWith("local-epub:") || targetUrl.startsWith("local-pdf:")) {
-      const bookId = targetUrl.split(":")[1]?.split("#")[0] || "";
-      if (bookId) {
-        const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
-        if (detail && Array.isArray(detail.chapters) && detail.chapters.length > 0) {
-          const chapters = detail.chapters.map((ch: any, i: number) => ({
-            index: ch.index ?? i,
-            title: ch.title,
-            url: ch.url || (`local-${detail.kind?.includes("TXT") ? "txt" : detail.kind?.includes("EPUB") ? "epub" : "pdf"}:${bookId}#${ch.index ?? i}`),
-            byteOffset: ch.byteOffset,
-            byteLength: ch.byteLength,
-          }));
-          return jsonResponse({ isSuccess: true, data: chapters });
-        }
-        // PDF: generate page list from totalChapterNum
-        if (targetUrl.startsWith("local-pdf:") && detail) {
-          const count = Math.max(1, detail.totalChapterNum || 1);
-          const chapters = Array.from({ length: count }, (_, i) => ({
-            index: i,
-            title: `第 ${i + 1} 页`,
-            url: `local-pdf:${bookId}#${i}`,
-          }));
-          return jsonResponse({ isSuccess: true, data: chapters });
-        }
+  // 1. Local books: read chapters from book_details JSON (one book, one JSON)
+  if (targetUrl.startsWith("local-txt:") || targetUrl.startsWith("local-epub:") || targetUrl.startsWith("local-pdf:")) {
+    const bookId = targetUrl.split(":")[1]?.split("#")[0] || "";
+    if (bookId) {
+      const detail = await documentHandlers.getBookDetail(env, userNs, bookId);
+      if (detail && Array.isArray(detail.chapters) && detail.chapters.length > 0) {
+        const chapters = detail.chapters.map((ch: any, i: number) => ({
+          index: ch.index ?? i,
+          title: ch.title,
+          url: ch.url || (`local-${detail.kind?.includes("TXT") ? "txt" : detail.kind?.includes("EPUB") ? "epub" : "pdf"}:${bookId}#${ch.index ?? i}`),
+          byteOffset: ch.byteOffset,
+          byteLength: ch.byteLength,
+        }));
+        return jsonResponse({ isSuccess: true, data: chapters });
+      }
+      // PDF: generate page list from totalChapterNum
+      if (targetUrl.startsWith("local-pdf:") && detail) {
+        const count = Math.max(1, detail.totalChapterNum || 1);
+        const chapters = Array.from({ length: count }, (_, i) => ({
+          index: i,
+          title: `第 ${i + 1} 页`,
+          url: `local-pdf:${bookId}#${i}`,
+        }));
+        return jsonResponse({ isSuccess: true, data: chapters });
       }
     }
-    return jsonResponse({ isSuccess: false, errorMsg: "书籍不存在，请重新上传" });
+  }
 
+  // 2. Source books (http/https): read chapters from book_details JSON (one book, one JSON)
+  if (targetUrl.startsWith("http://") || targetUrl.startsWith("https://")) {
+    const sourceBookId = stableSourceBookId(targetUrl);
+    const detail = await documentHandlers.getBookDetail(env, userNs, sourceBookId);
+    if (detail && Array.isArray(detail.chapters) && detail.chapters.length > 0) {
+      const chapters = detail.chapters.map((ch: any, i: number) => ({
+        index: ch.index ?? i,
+        title: ch.title,
+        url: ch.url,
+      }));
+      return jsonResponse({ isSuccess: true, data: chapters });
+    }
+  }
 
-  return jsonResponse({ isSuccess: true, data: [] });
+  return jsonResponse({ isSuccess: false, errorMsg: "书籍不存在，请重新上传" });
+}
+
+function stableSourceBookId(bookUrl: string): string {
+  let hash = 0;
+  for (let i = 0; i < bookUrl.length; i++) {
+    const char = bookUrl.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
+  }
+  return `source_${Math.abs(hash)}`;
 }
 
 function extractBookId(bookUrl: string): string | null {
