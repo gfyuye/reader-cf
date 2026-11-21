@@ -3,6 +3,7 @@ import { resolveUserNs } from "../auth";
 import { Env } from "../types";
 import { md5Hex as md5 } from "../md5";
 import { isSafeRemoteUrl } from "../utils";
+import { parseSearchResultsWithRules } from "./source-book";
 
 export async function handleExploreBook(request: Request, env: Env): Promise<Response> {
   const userNs = await resolveUserNs(request, env);
@@ -145,6 +146,9 @@ async function searchSingleSource(source: any, key: string, page: number, env: E
       rawUrl = rawUrl.substring(0, idx).trim();
     }
 
+    // 移除 cookie.* 等无返回值的模板表达式（Legado 语义：执行后为空字符串）
+    rawUrl = rawUrl.replace(/\{\{\s*(cookie\.[^{}]*?)\s*\}\}/g, "");
+
     const encodedKey = encodeURIComponent(key);
     let targetUrl = rawUrl
       .replace(/\{\{[^}]*key[^}]*\}\}/gi, encodedKey)
@@ -187,7 +191,7 @@ async function searchSingleSource(source: any, key: string, page: number, env: E
 
     const fetchOptions: RequestInit = {
       headers,
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(15000),
     };
 
     if (urlConfig) {
@@ -211,12 +215,20 @@ async function searchSingleSource(source: any, key: string, page: number, env: E
     const text = await resp.text();
 
     return await extractSearchResults(text, source, targetUrl, key);
-  } catch {
+  } catch (e: any) {
     return [];
   }
 }
 
 async function extractSearchResults(text: string, source: any, baseUrl: string, keyword: string): Promise<any[]> {
+  // 优先使用书源的 ruleSearch 规则解析（统一解析器）
+  if (source.ruleSearch && source.ruleSearch.bookList) {
+    try {
+      const parsed = await parseSearchResultsWithRules(text, source, baseUrl, keyword);
+      if (parsed.length > 0) return parsed;
+    } catch {}
+  }
+
   const books: any[] = [];
   let baseDomain = "";
   try {
@@ -225,7 +237,7 @@ async function extractSearchResults(text: string, source: any, baseUrl: string, 
     return [];
   }
 
-  // 1. JSON response handling (including XiaoXiao encrypted content)
+  // 1. JSON response handling (including XiaoXiao encrypted content) - 兼容旧逻辑
   if (text.trim().startsWith("{") || text.trim().startsWith("[")) {
     try {
       let data = JSON.parse(text);
@@ -332,7 +344,7 @@ export async function handleSearchBookMulti(request: Request, env: Env): Promise
   if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" });
 
   const body = await request.json<any>();
-  const key = (body.key || "").trim();
+  const key = (body.keyword || body.key || "").trim();
   const page = parseInt(body.page || "1", 10) || 1;
   const bookSourceUrls: string[] | undefined = Array.isArray(body.bookSourceUrls) ? body.bookSourceUrls : undefined;
   const bookSourceGroup: string | undefined = body.bookSourceGroup;

@@ -3,7 +3,7 @@ import { resolveUserNs } from "../auth";
 import { getEnv } from "../env";
 import { Env } from "../types";
 import { isSafeRemoteUrl, fetchTextWithEncoding } from "../utils";
-import { parseContentWithRules } from "../legado-engine";
+import { parseContentWithRules } from "./source-book";
 import * as cryptoUtils from "../crypto";
 import { readTxtChapterText } from "./txt";
 import { readEpubChapterHtml } from "./epub";

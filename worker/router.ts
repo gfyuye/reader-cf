@@ -85,7 +85,7 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
     if (path === "/reader3/deleteInvalidBookSources" && request.method === "POST") return bookSourceHandlers.handleDeleteInvalidBookSources(request, env, ctx);
     if (path === "/reader3/loginBookSource" && request.method === "POST") return bookSourceHandlers.handleLoginBookSource(request, env);
     if (path === "/reader3/readSourceFile" && request.method === "POST") return bookSourceHandlers.handleReadSourceFile(request, env);
-    if (path === "/reader3/bookSourceProxy" && request.method === "GET") return bookSourceHandlers.handleBookSourceProxy(request, env);
+    if (path === "/reader3/bookSourceProxy") return bookSourceHandlers.handleBookSourceProxy(request, env);
     if (path === "/reader3/importSourceBook" && request.method === "POST") return sourceBookHandlers.handleSourceBookImport(request, env, ctx);
 
     // Multi-Source Search

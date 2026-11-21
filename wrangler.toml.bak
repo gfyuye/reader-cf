@@ -1,0 +1,27 @@
+name = "reader-rust-worker"
+main = "worker/index.ts"
+compatibility_date = "2025-07-18"
+compatibility_flags = ["nodejs_compat"]
+
+# Force module worker format
+rules = [
+  { type = "ESModule", globs = ["**/*.ts"] }
+]
+
+# Local D1 database
+[[d1_databases]]
+binding = "DB"
+database_name = "reader-db-local"
+database_id = "local-dev-db"
+
+# Environment variables
+[vars]
+LOG_LEVEL = "debug"
+REQUEST_TIMEOUT_SECS = "30"
+SECURE = "false"
+INVITE_CODE = ""
+USER_LIMIT = "50"
+USER_BOOK_LIMIT = "2000"
+USER_LOCAL_BOOK_LIMIT = "0"
+DATABASE_BACKEND = "d1"
+STORAGE_BACKEND = "r2"

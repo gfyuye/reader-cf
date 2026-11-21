@@ -1,11 +1,107 @@
 /**
  * Pure JavaScript MD5 implementation (RFC 1321).
- *
- * Shared by the Worker entrypoint and the Legado rule engine so both
- * hash with exactly the same algorithm.
+ * All arithmetic uses & 0xffffffff for correct 32-bit unsigned behavior.
  */
 
-/** Encode a string as UTF-8 octets (RFC 3629), matching Rust's str::as_bytes. */
+function rotl(x: number, n: number): number {
+  return ((x << n) | (x >>> (32 - n))) >>> 0;
+}
+
+function add32(a: number, b: number): number {
+  return (a + b) >>> 0;
+}
+
+function F(x: number, y: number, z: number): number {
+  return ((x & y) | ((~x) & z)) >>> 0;
+}
+function G(x: number, y: number, z: number): number {
+  return ((x & z) | (y & (~z))) >>> 0;
+}
+function H(x: number, y: number, z: number): number {
+  return (x ^ y ^ z) >>> 0;
+}
+function I(x: number, y: number, z: number): number {
+  return (y ^ (x | (~z))) >>> 0;
+}
+
+function md5Core(X: number[]): string {
+  const T: number[] = [];
+  for (let i = 0; i < 64; i++) T[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 0x100000000) >>> 0;
+  const s: number[] = [
+    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+    5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+    4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+    6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
+  ];
+  const k1 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+  const k2 = [1, 6, 11, 0, 5, 10, 15, 4, 9, 14, 3, 8, 13, 2, 7, 12];
+  const k3 = [5, 8, 11, 14, 1, 4, 7, 10, 13, 0, 3, 6, 9, 12, 15, 2];
+  const k4 = [0, 7, 14, 5, 12, 3, 10, 1, 8, 15, 6, 13, 4, 11, 2, 9];
+
+  let a = 0x67452301, b = 0xefcdab89, c = 0x98badcfe, d = 0x10325476;
+
+  for (let chunk = 0; chunk < X.length / 16; chunk++) {
+    const base = chunk * 16;
+    let A = a, B = b, C = c, D = d;
+
+    // Round 1: F
+    for (let i = 0; i < 16; i++) {
+      const regs = i % 4 === 0 ? [A, B, C, D] : i % 4 === 1 ? [D, A, B, C] : i % 4 === 2 ? [C, D, A, B] : [B, C, D, A];
+      const [aa, bb, cc, dd] = regs;
+      const temp = (aa + F(bb, cc, dd) + X[base + k1[i]] + T[i]) >>> 0;
+      const rot = ((temp << s[i]) | (temp >>> (32 - s[i]))) >>> 0;
+      const sum = (rot + bb) >>> 0;
+      if (i % 4 === 0) A = sum; else if (i % 4 === 1) D = sum; else if (i % 4 === 2) C = sum; else B = sum;
+    }
+
+    // Round 2: G
+    for (let i = 0; i < 16; i++) {
+      const regs = i % 4 === 0 ? [A, B, C, D] : i % 4 === 1 ? [D, A, B, C] : i % 4 === 2 ? [C, D, A, B] : [B, C, D, A];
+      const [aa, bb, cc, dd] = regs;
+      const temp = (aa + G(bb, cc, dd) + X[base + k2[i]] + T[16 + i]) >>> 0;
+      const rot = ((temp << s[16 + i]) | (temp >>> (32 - s[16 + i]))) >>> 0;
+      const sum = (rot + bb) >>> 0;
+      if (i % 4 === 0) A = sum; else if (i % 4 === 1) D = sum; else if (i % 4 === 2) C = sum; else B = sum;
+    }
+
+    // Round 3: H
+    for (let i = 0; i < 16; i++) {
+      const regs = i % 4 === 0 ? [A, B, C, D] : i % 4 === 1 ? [D, A, B, C] : i % 4 === 2 ? [C, D, A, B] : [B, C, D, A];
+      const [aa, bb, cc, dd] = regs;
+      const temp = (aa + H(bb, cc, dd) + X[base + k3[i]] + T[32 + i]) >>> 0;
+      const rot = ((temp << s[32 + i]) | (temp >>> (32 - s[32 + i]))) >>> 0;
+      const sum = (rot + bb) >>> 0;
+      if (i % 4 === 0) A = sum; else if (i % 4 === 1) D = sum; else if (i % 4 === 2) C = sum; else B = sum;
+    }
+
+    // Round 4: I
+    for (let i = 0; i < 16; i++) {
+      const regs = i % 4 === 0 ? [A, B, C, D] : i % 4 === 1 ? [D, A, B, C] : i % 4 === 2 ? [C, D, A, B] : [B, C, D, A];
+      const [aa, bb, cc, dd] = regs;
+      const temp = (aa + I(bb, cc, dd) + X[base + k4[i]] + T[48 + i]) >>> 0;
+      const rot = ((temp << s[48 + i]) | (temp >>> (32 - s[48 + i]))) >>> 0;
+      const sum = (rot + bb) >>> 0;
+      if (i % 4 === 0) A = sum; else if (i % 4 === 1) D = sum; else if (i % 4 === 2) C = sum; else B = sum;
+    }
+
+    a = add32(a, A);
+    b = add32(b, B);
+    c = add32(c, C);
+    d = add32(d, D);
+  }
+
+  function wordToHex(v: number): string {
+    let s = "";
+    for (let i = 0; i < 4; i++) {
+      const byte = (v >>> (i * 8)) & 0xff;
+      s += (byte < 16 ? "0" : "") + byte.toString(16);
+    }
+    return s;
+  }
+
+  return (wordToHex(a) + wordToHex(b) + wordToHex(c) + wordToHex(d)).toLowerCase();
+}
+
 function utf8Bytes(input: string): number[] {
   const bytes: number[] = [];
   for (const ch of input) {
@@ -17,173 +113,42 @@ function utf8Bytes(input: string): number[] {
     } else if (cp < 0x10000) {
       bytes.push(0xe0 | (cp >> 12), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
     } else {
-      bytes.push(
-        0xf0 | (cp >> 18),
-        0x80 | ((cp >> 12) & 0x3f),
-        0x80 | ((cp >> 6) & 0x3f),
-        0x80 | (cp & 0x3f)
-      );
+      bytes.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
     }
   }
   return bytes;
 }
 
+function latin1Bytes(input: string): number[] {
+  const bytes: number[] = [];
+  for (let i = 0; i < input.length; i++) bytes.push(input.charCodeAt(i) & 0xff);
+  return bytes;
+}
+
+function prepareWords(bytes: number[]): number[] {
+  const bitLen = bytes.length * 8;
+  const padded = [...bytes, 0x80];
+  while (padded.length % 64 !== 56) padded.push(0);
+  // Append 64-bit little-endian length. Use explicit shifts to avoid
+  // JS >>> masking shift count to 5 bits (8 >>> 32 === 8, not 0).
+  padded.push(bitLen & 0xff, (bitLen >>> 8) & 0xff, (bitLen >>> 16) & 0xff, (bitLen >>> 24) & 0xff, 0, 0, 0, 0);
+
+  const words: number[] = [];
+  for (let i = 0; i < padded.length; i += 4) {
+    words.push(
+      (padded[i] |
+        (padded[i + 1] << 8) |
+        (padded[i + 2] << 16) |
+        (padded[i + 3] << 24)) >>> 0
+    );
+  }
+  return words;
+}
+
 export function md5Hex(string: string): string {
-  function rotateLeft(lValue: number, iShiftBits: number) {
-    return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits));
-  }
-  function addUnsigned(lX: number, lY: number) {
-    const lX8 = lX & 0x80000000;
-    const lY8 = lY & 0x80000000;
-    const lX4 = lX & 0x40000000;
-    const lY4 = lY & 0x40000000;
-    const lResult = (lX & 0x3fffffff) + (lY & 0x3fffffff);
-    if (lX4 & lY4) return lResult ^ 0x80000000 ^ lX8 ^ lY8;
-    if (lX4 | lY4) {
-      if (lResult & 0x40000000) return lResult ^ 0xc0000000 ^ lX8 ^ lY8;
-      else return lResult ^ 0x40000000 ^ lX8 ^ lY8;
-    } else {
-      return lResult ^ lX8 ^ lY8;
-    }
-  }
-  function F(x: number, y: number, z: number) { return (x & y) | (~x & z); }
-  function G(x: number, y: number, z: number) { return (x & z) | (y & ~z); }
-  function H(x: number, y: number, z: number) { return x ^ y ^ z; }
-  function I(x: number, y: number, z: number) { return y ^ (x | ~z); }
-  function FF(a: number, b: number, c: number, d: number, x: number, s: number, ac: number) {
-    a = addUnsigned(a, addUnsigned(addUnsigned(F(b, c, d), x), ac));
-    return addUnsigned(rotateLeft(a, s), b);
-  }
-  function GG(a: number, b: number, c: number, d: number, x: number, s: number, ac: number) {
-    a = addUnsigned(a, addUnsigned(addUnsigned(G(b, c, d), x), ac));
-    return addUnsigned(rotateLeft(a, s), b);
-  }
-  function HH(a: number, b: number, c: number, d: number, x: number, s: number, ac: number) {
-    a = addUnsigned(a, addUnsigned(addUnsigned(H(b, c, d), x), ac));
-    return addUnsigned(rotateLeft(a, s), b);
-  }
-  function II(a: number, b: number, c: number, d: number, x: number, s: number, ac: number) {
-    a = addUnsigned(a, addUnsigned(addUnsigned(I(b, c, d), x), ac));
-    return addUnsigned(rotateLeft(a, s), b);
-  }
-  function convertToWordArray(string: string) {
-    // MD5 is defined over octets, so the input must be encoded as UTF-8 bytes.
-    // Using string.length / charCodeAt directly would hash UTF-16 code units
-    // instead, which diverges from the Rust backend (md-5 crate) for any
-    // non-ASCII input (e.g. non-ASCII passwords).
-    const bytes = utf8Bytes(string);
-    let lWordCount;
-    const lMessageLength = bytes.length;
-    const lNumberOfWordsTempOne = lMessageLength + 8;
-    const lNumberOfWordsTempTwo = (lNumberOfWordsTempOne - (lNumberOfWordsTempOne % 64)) / 64;
-    const lNumberOfWords = (lNumberOfWordsTempTwo + 1) * 16;
-    const lWordArray = Array(lNumberOfWords - 1);
-    let lBytePosition = 0;
-    let lByteCount = 0;
-    while (lByteCount < lMessageLength) {
-      lWordCount = (lByteCount - (lByteCount % 4)) / 4;
-      lBytePosition = (lByteCount % 4) * 8;
-      lWordArray[lWordCount] = lWordArray[lWordCount] | (bytes[lByteCount] << lBytePosition);
-      lByteCount++;
-    }
-    lWordCount = (lByteCount - (lByteCount % 4)) / 4;
-    lBytePosition = (lByteCount % 4) * 8;
-    lWordArray[lWordCount] = lWordArray[lWordCount] | (0x80 << lBytePosition);
-    lWordArray[lNumberOfWords - 2] = lMessageLength << 3;
-    lWordArray[lNumberOfWords - 1] = lMessageLength >>> 29;
-    return lWordArray;
-  }
-  function wordToHex(lValue: number) {
-    let WordToHexValue = "", WordToHexValueTemp = "", lByte, lCount;
-    for (lCount = 0; lCount <= 3; lCount++) {
-      lByte = (lValue >>> (lCount * 8)) & 255;
-      WordToHexValueTemp = "0" + lByte.toString(16);
-      WordToHexValue = WordToHexValue + WordToHexValueTemp.substr(WordToHexValueTemp.length - 2, 2);
-    }
-    return WordToHexValue;
-  }
+  return md5Core(prepareWords(utf8Bytes(string)));
+}
 
-  const x = convertToWordArray(string);
-  let a = 0x67452301, b = 0xefcdab89, c = 0x98badcfe, d = 0x10325476;
-  const S11 = 7, S12 = 12, S13 = 17, S14 = 22;
-  const S21 = 5, S22 = 9, S23 = 14, S24 = 20;
-  const S31 = 4, S32 = 11, S33 = 16, S34 = 23;
-  const S41 = 6, S42 = 10, S43 = 15, S44 = 21;
-
-  for (let k = 0; k < x.length; k += 16) {
-    const AA = a, BB = b, CC = c, DD = d;
-    a = FF(a, b, c, d, x[k], S11, 0xd76aa478);
-    d = FF(d, a, b, c, x[k + 1], S12, 0xe8c7b756);
-    c = FF(c, d, a, b, x[k + 2], S13, 0x242070db);
-    b = FF(b, c, d, a, x[k + 3], S14, 0xc1bdceee);
-    a = FF(a, b, c, d, x[k + 4], S11, 0xf57c0faf);
-    d = FF(d, a, b, c, x[k + 5], S12, 0x4787c62a);
-    c = FF(c, d, a, b, x[k + 6], S13, 0xa8304613);
-    b = FF(b, c, d, a, x[k + 7], S14, 0xfd469501);
-    a = FF(a, b, c, d, x[k + 8], S11, 0x698098d8);
-    d = FF(d, a, b, c, x[k + 9], S12, 0x8b44f7af);
-    c = FF(c, d, a, b, x[k + 10], S13, 0xffff5bb1);
-    b = FF(b, c, d, a, x[k + 11], S14, 0x895cd7be);
-    a = FF(a, b, c, d, x[k + 12], S11, 0x6b901122);
-    d = FF(d, a, b, c, x[k + 13], S12, 0xfd987193);
-    c = FF(c, d, a, b, x[k + 14], S13, 0xa679438e);
-    b = FF(b, c, d, a, x[k + 15], S14, 0x49b40821);
-
-    a = GG(a, b, c, d, x[k + 1], S21, 0xf61e2562);
-    d = GG(d, a, b, c, x[k + 6], S22, 0xc040b340);
-    c = GG(c, d, a, b, x[k + 11], S23, 0x265e5a51);
-    b = GG(b, c, d, a, x[k], S24, 0xe9b6c7aa);
-    a = GG(a, b, c, d, x[k + 5], S21, 0xd62f105d);
-    d = GG(d, a, b, c, x[k + 10], S22, 0x2441453);
-    c = GG(c, d, a, b, x[k + 15], S23, 0xd8a1e681);
-    b = GG(b, c, d, a, x[k + 4], S24, 0xe7d3fbc8);
-    a = GG(a, b, c, d, x[k + 9], S21, 0x21e1cde6);
-    d = GG(d, a, b, c, x[k + 14], S22, 0xc33707d6);
-    c = GG(c, d, a, b, x[k + 3], S23, 0xf4d50d87);
-    b = GG(b, c, d, a, x[k + 8], S24, 0x455a14ed);
-    a = GG(a, b, c, d, x[k + 13], S21, 0xa9e3e905);
-    d = GG(d, a, b, c, x[k + 2], S22, 0xfcefa3f8);
-    c = GG(c, d, a, b, x[k + 7], S23, 0x676f02d9);
-    b = GG(b, c, d, a, x[k + 12], S24, 0x8d2a4c8a);
-
-    a = HH(a, b, c, d, x[k + 5], S31, 0xfffa3942);
-    d = HH(d, a, b, c, x[k + 8], S32, 0x8771f681);
-    c = HH(c, d, a, b, x[k + 11], S33, 0x6d9d6122);
-    b = HH(b, c, d, a, x[k + 14], S34, 0xfde5380c);
-    a = HH(a, b, c, d, x[k + 1], S31, 0xa4beea44);
-    d = HH(d, a, b, c, x[k + 4], S32, 0x4bdecfa9);
-    c = HH(c, d, a, b, x[k + 7], S33, 0xf6bb4b60);
-    b = HH(b, c, d, a, x[k + 10], S34, 0xbebfbc70);
-    a = HH(a, b, c, d, x[k + 13], S31, 0x289b7ec6);
-    d = HH(d, a, b, c, x[k], S32, 0xeaa127fa);
-    c = HH(c, d, a, b, x[k + 3], S33, 0xd4ef3085);
-    b = HH(b, c, d, a, x[k + 6], S34, 0x4881d05);
-    a = HH(a, b, c, d, x[k + 9], S31, 0xd9d4d039);
-    d = HH(d, a, b, c, x[k + 12], S32, 0xe6db99e5);
-    c = HH(c, d, a, b, x[k + 15], S33, 0x1fa27cf8);
-    b = HH(b, c, d, a, x[k + 2], S34, 0xc4ac5665);
-
-    a = II(a, b, c, d, x[k], S41, 0xf4292244);
-    d = II(d, a, b, c, x[k + 7], S42, 0x432aff97);
-    c = II(c, d, a, b, x[k + 14], S43, 0xab9423a7);
-    b = II(b, c, d, a, x[k + 5], S44, 0xfc93a039);
-    a = II(a, b, c, d, x[k + 12], S41, 0x655b59c3);
-    d = II(d, a, b, c, x[k + 3], S42, 0x8f0ccc92);
-    c = II(c, d, a, b, x[k + 10], S43, 0xffeff47d);
-    b = II(b, c, d, a, x[k + 1], S44, 0x85845dd1);
-    a = II(a, b, c, d, x[k + 8], S41, 0x6fa87e4f);
-    d = II(d, a, b, c, x[k + 15], S42, 0xfe2ce6e0);
-    c = II(c, d, a, b, x[k + 6], S43, 0xa3014314);
-    b = II(b, c, d, a, x[k + 13], S44, 0x4e0811a1);
-    a = II(a, b, c, d, x[k + 4], S41, 0xf7537e82);
-    d = II(d, a, b, c, x[k + 11], S42, 0xbd3af235);
-    c = II(c, d, a, b, x[k + 2], S43, 0x2ad7d2bb);
-    b = II(b, c, d, a, x[k + 9], S44, 0xeb86d391);
-
-    a = addUnsigned(a, AA);
-    b = addUnsigned(b, BB);
-    c = addUnsigned(c, CC);
-    d = addUnsigned(d, DD);
-  }
-  return (wordToHex(a) + wordToHex(b) + wordToHex(c) + wordToHex(d)).toLowerCase();
+export function md5HexLatin1(string: string): string {
+  return md5Core(prepareWords(latin1Bytes(string)));
 }

@@ -22,14 +22,20 @@ let _cleanupDone = false;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    if (!_cleanupDone) {
+    // Health check should be fast - skip cleanup for health endpoint
+    const url = new URL(request.url);
+    if (url.pathname !== "/health" && !_cleanupDone && env.BUCKET) {
       _cleanupDone = true;
-      try {
-        const { aborted, errors } = await cleanupStaleMultipartUploads(env);
-        console.log(`Cold-start cleanup stale multipart uploads: aborted=${aborted}, errors=${errors}`);
-      } catch (e) {
-        console.error("Cold-start cleanup failed:", e);
-      }
+      ctx.waitUntil(
+        (async () => {
+          try {
+            const { aborted, errors } = await cleanupStaleMultipartUploads(env);
+            console.log(`Cold-start cleanup stale multipart uploads: aborted=${aborted}, errors=${errors}`);
+          } catch (e) {
+            console.error("Cold-start cleanup failed:", e);
+          }
+        })()
+      );
     }
     return handleRequest(request, env, ctx);
   },

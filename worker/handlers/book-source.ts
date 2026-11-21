@@ -5,6 +5,12 @@ import { Env } from "../types";
 import * as documentHandlers from "../handlers/document";
 import { triggerOnChangeSync } from "./webdav";
 import { isSafeRemoteUrl, fetchTextWithEncoding } from "../utils";
+import { 
+  parseChapterListWithRules, 
+  parseContentWithRules, 
+  extractTextFromHtml,
+  executeLegadoJs
+} from "./source-book";
 
 export async function handleGetBookSources(request: Request, env: Env): Promise<Response> {
   const userNs = await resolveUserNs(request, env);
@@ -524,6 +530,42 @@ export async function handleReadSourceFile(request: Request, env: Env): Promise<
 
 export async function handleBookSourceProxy(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
+  
+  // POST: parse_chapters action
+  if (request.method === "POST") {
+    const userNs = await resolveUserNs(request, env);
+    if (!userNs) return jsonResponse({ isSuccess: false, errorMsg: "请登录后使用", data: "NEED_LOGIN" }, 401);
+
+    const contentType = request.headers.get("content-type") || "";
+    console.log(`[bookSourceProxy] POST content-type: ${contentType}`);
+    if (contentType.includes("application/json")) {
+      try {
+        const body = await request.json<{
+          action?: string;
+          html?: string;
+          sourceUrl?: string;
+          sourceJson?: any;
+        }>();
+        console.log(`[bookSourceProxy] POST body action: ${body?.action}`);
+        
+        if (body?.action === "parse_chapters" && body.html && body.sourceJson) {
+          return await handleParseChapters(body.html, body.sourceUrl || "", body.sourceJson, env);
+        }
+        if (body?.action === "parse_content" && body.html && body.sourceJson) {
+          return await handleParseContent(body.html, body.sourceUrl || "", body.sourceJson, env);
+        }
+        if (body?.action === "parse_toc_url" && body.html && body.sourceJson) {
+          return await handleParseTocUrl(body.html, body.sourceUrl || "", body.sourceJson, env);
+        }
+        console.log(`[bookSourceProxy] No matching action for: ${body?.action}`);
+      } catch (e) {
+        console.error(`[bookSourceProxy] JSON parse error: ${e}`);
+      }
+    }
+    return jsonResponse({ isSuccess: false, errorMsg: "无效的 POST 请求" });
+  }
+  
+  // GET: 代理请求
   const targetUrl = url.searchParams.get("url") || "";
   const bookSourceUrl = url.searchParams.get("bookSourceUrl") || "";
 
@@ -555,5 +597,58 @@ export async function handleBookSourceProxy(request: Request, env: Env): Promise
     });
   } catch (err: any) {
     return jsonResponse({ isSuccess: false, errorMsg: `代理请求失败：${err.message}` });
+  }
+}
+
+async function handleParseTocUrl(html: string, sourceUrl: string, sourceJson: any, env: Env): Promise<Response> {
+  try {
+    const ruleTocUrl = sourceJson?.ruleBookInfo?.tocUrl || sourceJson?.ruleToc?.tocUrl || "";
+
+    let tocUrl = "";
+    if (/^https?:\/\//i.test(ruleTocUrl)) {
+      tocUrl = ruleTocUrl;
+    } else if (ruleTocUrl.startsWith("@js:")) {
+      const res = await executeLegadoJs(ruleTocUrl.substring(4), { result: html, baseUrl: sourceUrl });
+      tocUrl = typeof res === "string" ? res : "";
+    } else if (ruleTocUrl) {
+      tocUrl = extractTextFromHtml(html, ruleTocUrl);
+    }
+
+    if (tocUrl && !/^https?:\/\//i.test(tocUrl) && !tocUrl.startsWith("//")) {
+      try {
+        tocUrl = new URL(tocUrl, sourceUrl).toString();
+      } catch {
+        try {
+          tocUrl = new URL(sourceJson?.bookSourceUrl || sourceUrl).origin + (tocUrl.startsWith("/") ? "" : "/") + tocUrl;
+        } catch {}
+      }
+    } else if (tocUrl.startsWith("//")) {
+      tocUrl = "https:" + tocUrl;
+    }
+
+    // Legado 语义：tocUrl 为空时，目录页就是详情页本身
+    if (!tocUrl) tocUrl = sourceUrl;
+
+    return jsonResponse({ isSuccess: true, tocUrl });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: `TOC URL 解析失败：${err.message}` });
+  }
+}
+
+async function handleParseContent(html: string, sourceUrl: string, sourceJson: any, env: Env): Promise<Response> {
+  try {
+    const content = await parseContentWithRules(html, sourceJson, sourceUrl);
+    return jsonResponse({ isSuccess: true, content });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: `正文解析失败：${err.message}` });
+  }
+}
+
+async function handleParseChapters(html: string, sourceUrl: string, sourceJson: any, env: Env): Promise<Response> {
+  try {
+    const chapters = await parseChapterListWithRules(html, sourceJson, sourceUrl);
+    return jsonResponse({ isSuccess: true, chapters });
+  } catch (err: any) {
+    return jsonResponse({ isSuccess: false, errorMsg: `章节解析失败：${err.message}` });
   }
 }

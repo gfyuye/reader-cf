@@ -101,3 +101,20 @@ CREATE TABLE IF NOT EXISTS user_remote_webdav (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_remote_webdav_enabled ON user_remote_webdav(enabled);
+
+-- Variable persistence for book sources (Legado java.put/get, book.getVariable/setVariable)
+CREATE TABLE IF NOT EXISTS book_source_variables (
+    user_ns TEXT NOT NULL DEFAULT 'default',
+    book_source_url TEXT NOT NULL,
+    scope TEXT NOT NULL CHECK (scope IN ('global', 'book', 'chapter')),
+    book_url TEXT,  -- for book/chapter scope
+    chapter_index INTEGER,  -- for chapter scope
+    var_key TEXT NOT NULL,
+    var_value TEXT NOT NULL,  -- JSON stringified
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_ns, book_source_url, scope, book_url, chapter_index, var_key),
+    FOREIGN KEY (user_ns) REFERENCES users(username) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_book_source_variables_lookup 
+    ON book_source_variables(user_ns, book_source_url, scope, book_url, chapter_index);

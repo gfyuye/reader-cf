@@ -4,7 +4,7 @@ import { getEnv } from "../env";
 import { Env } from "../types";
 import * as documentHandlers from "../handlers/document";
 import { isSafeRemoteUrl, fetchTextWithEncoding } from "../utils";
-import { parseContentWithRules } from "../legado-engine";
+import { parseContentWithRules } from "./source-book";
 
 export async function handleGetRssArticles(request: Request, env: Env): Promise<Response> {
   try {
